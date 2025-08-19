@@ -1,8 +1,4 @@
-// Inizializzazione con controlli robusti e gestione mobile
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 Inizializzazione app...');
-            console.log('📊 Tasks array:', tasks);
-            console.log('📱 Tasks nel localStorage:', localStorage.getI            <!-- Lista compiti -->
+<!-- Lista compiti -->
             <div class="tasks-section">
                 <h2 class="section-title">📌 Compiti Attivi</h2>
                 <div class="tasks-grid" id="tasksGrid">
@@ -902,11 +898,17 @@
             console.log('✅ Form listener aggiunto con successo');
         });
 
-        // Inizializzazione con controlli robusti
+        // Inizializzazione con controlli robusti e gestione mobile
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🚀 Inizializzazione app...');
             console.log('📊 Tasks array:', tasks);
             console.log('📱 Tasks nel localStorage:', localStorage.getItem('tasks'));
+            
+            // Aggiungi meta tag anti-cache
+            addCacheBustingMeta();
+            
+            // Controlla versione app
+            checkAppVersion();
             
             try {
                 renderTasks();
@@ -928,6 +930,16 @@
                 setTimeout(() => {
                     requestNotificationPermission();
                 }, 3000);
+                
+                // Su mobile, forza refresh ogni 30 secondi se la app è attiva
+                if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                    console.log('📱 Dispositivo mobile rilevato');
+                    setInterval(() => {
+                        if (!document.hidden) {
+                            forceDataRefresh();
+                        }
+                    }, 30000); // Ogni 30 secondi
+                }
                 
             } catch (error) {
                 console.error('❌ Errore nell\'inizializzazione:', error);
@@ -1090,6 +1102,53 @@
                 badge: '/icon-72x72.png',
                 tag: 'test-notification'
             });
+        };
+
+        // Funzione per forzare aggiornamento completo (utile per debug mobile)
+        window.forceFullRefresh = function() {
+            console.log('🔄 Forzando refresh completo...');
+            
+            // Cancella cache
+            if ('caches' in window) {
+                caches.keys().then(names => {
+                    names.forEach(name => {
+                        caches.delete(name);
+                    });
+                });
+            }
+            
+            // Ricarica dati
+            forceDataRefresh();
+            
+            // Mostra conferma
+            showAlert('success', 'Refresh Completato', 'App aggiornata completamente');
+            
+            console.log('✅ Refresh completo terminato');
+        };
+
+        // Funzione per diagnosticare problemi mobile
+        window.mobileDiagnostic = function() {
+            console.log('=== 📱 DIAGNOSTICA MOBILE ===');
+            console.log('User Agent:', navigator.userAgent);
+            console.log('Online:', navigator.onLine);
+            console.log('Service Worker supportato:', 'serviceWorker' in navigator);
+            console.log('PWA installata:', window.matchMedia('(display-mode: standalone)').matches);
+            console.log('Visibilità pagina:', document.visibilityState);
+            console.log('Tasks count:', tasks.length);
+            console.log('LocalStorage disponibile:', typeof(Storage) !== "undefined");
+            console.log('Cache disponibile:', 'caches' in window);
+            console.log('=============================');
+            
+            return {
+                userAgent: navigator.userAgent,
+                online: navigator.onLine,
+                serviceWorkerSupported: 'serviceWorker' in navigator,
+                isPWA: window.matchMedia('(display-mode: standalone)').matches,
+                pageVisibility: document.visibilityState,
+                tasksCount: tasks.length,
+                localStorage: typeof(Storage) !== "undefined",
+                cacheAPI: 'caches' in window
+            };
         };
     </script>
 </body>
