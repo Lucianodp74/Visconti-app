@@ -1,299 +1,4 @@
-<!-- Lista compiti -->
-            <div class="tasks-section">
-                <h2 class="section-title">📌 Compiti Attivi</h2>
-                <div class="tasks-grid" id="tasksGrid">
-                    <div class="empty-state">
-                        <div style="font-size: 4rem; margin-bottom: 20px;">📋</div>
-                        <h3>Nessun compito presente</h3>
-                        <p>Aggiungi il tuo primo compito utilizzando il form sopra</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Array per memorizzare i compiti e le notifiche - con controlli di sicurezza
-        let tasks = [];
-        let notifications = [];
-        let alertCounter = 0;
-
-        // Inizializzazione sicura del localStorage
-        try {
-            const savedTasks = localStorage.getItem('tasks');
-            const savedNotifications = localStorage.getItem('notifications');
-            
-            if (savedTasks) {
-                tasks = JSON.parse(savedTasks) || [];
-            }
-            if (savedNotifications) {
-                notifications = JSON.parse(savedNotifications) || [];
-            }
-            
-            console.log('✅ Dati caricati dal localStorage');
-            console.log('Tasks caricati:', tasks.length);
-            console.log('Notifications caricate:', notifications.length);
-        } catch (error) {
-            console.error('❌ Errore nel caricamento localStorage:', error);
-            tasks = [];
-            notifications = [];
-        }
-
-        // Stati possibili
-        const taskStates = {
-            'da-iniziare': { label: '📋 Da Iniziare', class: 'status-da-iniziare' },
-            'in-corso': { label: '🚀 In Corso', class: 'status-in-corso' },
-            'in-revisione': { label: '👁️ In Revisione', class: 'status-in-revisione' },
-            'completato': { label: '✅ Completato', class: 'status-completato' },
-            'in-pausa': { label: '⏸️ In Pausa', class: 'status-in-pausa' },
-            'annullato': { label: '❌ Annullato', class: 'status-annullato' }
-        };
-
-        // Priorità
-        const priorities = {
-            'alta': { label: '🔴 Alta', class: 'priority-alta' },
-            'media': { label: '🟡 Media', class: 'priority-media' },
-            'bassa': { label: '🟢 Bassa', class: 'priority-bassa' }
-        };
-
-        // Funzione per generare ID univoco
-        function generateId() {
-            return Date.now().toString(36) + Math.random().toString(36).substr(2);
-        }
-
-        // Funzione per formattare la data
-        function formatDate(dateString) {
-            if (!dateString) return '';
-            const date = new Date(dateString);
-            return date.toLocaleDateString('it-IT');
-        }
-
-        // Funzione per salvare i compiti nel localStorage - con controlli
-        function saveTasks() {
-            try {
-                localStorage.setItem('tasks', JSON.stringify(tasks));
-                console.log('✅ Tasks salvati nel localStorage:', tasks.length, 'compiti');
-            } catch (error) {
-                console.error('❌ Errore nel salvataggio tasks:', error);
-                alert('Errore nel salvataggio! Controlla lo spazio di archiviazione del browser.');
-            }
-        }
-
-        // Funzione per salvare le notifiche - con controlli
-        function saveNotifications() {
-            try {
-                localStorage.setItem('notifications', JSON.stringify(notifications));
-                console.log('✅ Notifications salvate nel localStorage');
-            } catch (error) {
-                console.error('❌ Errore nel salvataggio notifications:', error);
-            }
-        }
-
-        // Funzione per mostrare alert
-        function showAlert(type, title, message, duration = 5000) {
-            alertCounter++;
-            const alertId = `alert-${alertCounter}`;
-            
-            const alertElement = document.createElement('div');
-            alertElement.id = alertId;
-            alertElement.className = `alert alert-${type}`;
-            alertElement.innerHTML = `
-                <button class="alert-close" onclick="closeAlert('${alertId}')">&times;</button>
-                <div class="alert-title">${title}</div>
-                <div class="alert-message">${message}</div>
-            `;
-            
-            document.getElementById('alertContainer').appendChild(alertElement);
-            
-            // Auto-dismiss dopo il tempo specificato
-            setTimeout(() => closeAlert(alertId), duration);
-        }
-
-        // Funzione per chiudere un alert
-        function closeAlert(alertId) {
-            const alert = document.getElementById(alertId);
-            if (alert) {
-                alert.style.animation = 'slideOutRight 0.3s ease-in';
-                setTimeout(() => {
-                    if (alert.parentNode) {
-                        alert.parentNode.removeChild(alert);
-                    }
-                }, 300);
-            }
-        }
-
-        // Funzione per aggiungere notifica - con controllo duplicati
-        function addNotification(type, title, message, taskId = null) {
-            const notification = {
-                id: generateId(),
-                type: type,
-                title: title,
-                message: message,
-                taskId: taskId,
-                timestamp: new Date().toISOString(),
-                read: false
-            };
-            
-            notifications.unshift(notification);
-            
-            // Mantieni solo le ultime 50 notifiche
-            if (notifications.length > 50) {
-                notifications = notifications.slice(0, 50);
-            }
-            
-            saveNotifications();
-            renderNotifications();
-            
-            // Mostra anche come alert
-            const icons = {
-                'deadline': '⏰',
-                'overdue': '🚨',
-                'completed': '✅',
-                'assigned': '📋',
-                'reminder': '🔔',
-                'info': 'ℹ️'
-            };
-            
-            showAlert(
-                type === 'overdue' ? 'danger' : 
-                type === 'deadline' ? 'warning' : 
-                type === 'completed' ? 'success' : 
-                type === 'info' ? 'info' : 'info',
-                `${icons[type] || '🔔'} ${title}`,
-                message
-            );
-        }
-
-        // Funzione per calcolare badge scadenza
-        function getDueBadge(dueDate) {
-            if (!dueDate) return '';
-            
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const due = new Date(dueDate);
-            due.setHours(0, 0, 0, 0);
-            const diffTime = due - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
-            if (diffDays < 0) {
-                return `<span class="due-badge due-overdue">Scaduto</span>`;
-            } else if (diffDays === 0) {
-                return `<span class="due-badge due-today">Oggi</span>`;
-            } else if (diffDays <= 3) {
-                return `<span class="due-badge due-soon">${diffDays}g</span>`;
-            }
-            return '';
-        }
-
-        // Funzione per verificare scadenze
-        function checkDeadlines() {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            let overdueCount = 0;
-            let todayCount = 0;
-            let soonCount = 0;
-            
-            tasks.forEach(task => {
-                if (!task.dueDate || task.status === 'completato' || task.status === 'annullato') return;
-                
-                const due = new Date(task.dueDate);
-                due.setHours(0, 0, 0, 0);
-                const diffTime = due - today;
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                
-                if (diffDays < 0) {
-                    overdueCount++;
-                    addNotification('overdue', 'Compito Scaduto!', 
-                        `Il compito "${task.title}" è scaduto da ${Math.abs(diffDays)} giorni`, task.id);
-                } else if (diffDays === 0) {
-                    todayCount++;
-                    addNotification('deadline', 'Scadenza Oggi!', 
-                        `Il compito "${task.title}" scade oggi`, task.id);
-                } else if (diffDays <= 3) {
-                    soonCount++;
-                    addNotification('reminder', 'Scadenza Imminente', 
-                        `Il compito "${task.title}" scade tra ${diffDays} giorni`, task.id);
-                }
-            });
-            
-            // Riepilogo
-            if (overdueCount === 0 && todayCount === 0 && soonCount === 0) {
-                showAlert('success', 'Tutto OK!', 'Non ci sono compiti in scadenza');
-            } else {
-                const summary = [];
-                if (overdueCount > 0) summary.push(`${overdueCount} scaduti`);
-                if (todayCount > 0) summary.push(`${todayCount} scadono oggi`);
-                if (soonCount > 0) summary.push(`${soonCount} in scadenza presto`);
-                
-                showAlert('warning', 'Riepilogo Scadenze', summary.join(', '));
-            }
-        }
-
-        // Funzione per renderizzare le notifiche - con debug migliorato
-        function renderNotifications() {
-            const notificationsList = document.getElementById('notificationsList');
-            
-            if (!notificationsList) {
-                console.error('❌ Elemento notificationsList non trovato');
-                return;
-            }
-            
-            console.log(`🔔 Rendering notifiche - Totale: ${notifications.length}`);
-            
-            if (notifications.length === 0) {
-                notificationsList.innerHTML = `
-                    <div class="empty-state" style="padding: 20px;">
-                        <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
-                        <p style="margin: 0;">Nessuna notifica al momento</p>
-                    </div>
-                `;
-                console.log('📭 Nessuna notifica da mostrare');
-                return;
-            }
-
-            const icons = {
-                'deadline': '⏰',
-                'overdue': '🚨',
-                'completed': '✅',
-                'assigned': '📋',
-                'reminder': '🔔',
-                'info': 'ℹ️'
-            };
-
-            const notificationsToShow = notifications.slice(0, 10);
-            console.log(`📋 Mostro ${notificationsToShow.length} notifiche`);
-
-            notificationsList.innerHTML = notificationsToShow.map(notif => `
-                <div class="notification-item" ${notif.taskId ? `data-task-id="${notif.taskId}"` : ''}>
-                    <div class="notification-icon">${icons[notif.type] || '🔔'}</div>
-                    <div class="notification-content">
-                        <div class="notification-title">${notif.title}</div>
-                        <div class="notification-text">${notif.message}</div>
-                    </div>
-                    <div class="notification-time">${getTimeAgo(notif.timestamp)}</div>
-                </div>
-            `).join('');
-            
-            console.log(`✅ Renderizzate ${notificationsToShow.length} notifiche nel DOM`);
-        }
-
-        // Funzione per calcolare il tempo trascorso
-        function getTimeAgo(timestamp) {
-            const now = new Date();
-            const time = new Date(timestamp);
-            const diffMs = now - time;
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-            
-            if (diffMins < 1) return 'Ora';
-            if (diffMins < 60) return `${diffMins}m fa`;
-            if (diffHours < 24) return `${diffHours}h fa`;
-            return `${diffDays}g fa`;
-        }
-
-        // Funzione per aggiungere un nuovo compito - versione robusta
+// Funzione per aggiungere un nuovo compito - versione robusta
         function addTask(taskData) {
             try {
                 console.log('🚀 Inizio aggiunta compito:', taskData);
@@ -780,7 +485,9 @@
         window.addEventListener('appinstalled', (e) => {
             console.log('✅ PWA installata');
             showAlert('success', 'Installazione Completata!', 'L\'app è ora disponibile sul tuo dispositivo');
-            installPrompt.style.display = 'none';
+            if (installPrompt) {
+                installPrompt.style.display = 'none';
+            }
         });
 
         // Online/Offline Status con controlli di sicurezza
@@ -1008,7 +715,7 @@
             };
         };
 
-        // Funzione per contare e verificare i compiti
+        // Funzioni di debug aggiuntive per testing
         window.countTasks = function() {
             console.log('=== 📊 CONTEGGIO COMPITI ===');
             console.log('Tasks in memoria:', tasks.length);
@@ -1025,7 +732,6 @@
             };
         };
 
-        // Funzione per forzare il re-render di tutti i compiti
         window.forceRenderAllTasks = function() {
             console.log('🔄 Forzando re-render di tutti i compiti...');
             renderTasks();
@@ -1033,66 +739,12 @@
             console.log('✅ Re-render completato');
         };
 
-        // Test per verificare l'eliminazione delle notifiche
-        window.testDeleteNotifications = function(taskId) {
-            console.log('🧪 Test eliminazione notifiche per taskId:', taskId);
-            
-            if (!taskId && tasks.length > 0) {
-                taskId = tasks[0].id;
-                console.log('📋 Uso il primo compito disponibile:', taskId);
-            }
-            
-            if (!taskId) {
-                console.log('❌ Nessun compito disponibile per il test');
-                return;
-            }
-            
-            console.log('Prima dell\'eliminazione:');
-            console.log('- Tasks:', tasks.length);
-            console.log('- Notifications:', notifications.length);
-            console.log('- Notifications con taskId', taskId + ':', notifications.filter(n => n.taskId === taskId).length);
-            
-            deleteTask(taskId);
-            
-            setTimeout(() => {
-                console.log('Dopo l\'eliminazione:');
-                console.log('- Tasks:', tasks.length);
-                console.log('- Notifications:', notifications.length);
-                console.log('- Notifications con taskId', taskId + ':', notifications.filter(n => n.taskId === taskId).length);
-            }, 500);
-        };
-        
-        // Funzione per forzare l'aggiornamento delle notifiche
-        window.forceRefreshNotifications = function() {
-            console.log('🔄 Aggiornamento forzato notifiche...');
-            renderNotifications();
-            console.log('✅ Aggiornamento completato');
-        };
-
-        // Test rapido per aggiungere un compito di prova
-        window.testAddTask = function() {
-            console.log('🧪 Test aggiunta compito...');
-            const testTask = {
-                title: 'Test Compito',
-                description: 'Questo è un compito di test',
-                assignee: 'Test User',
-                priority: 'media',
-                dueDate: '',
-                status: 'da-iniziare',
-                reminderEnabled: false
-            };
-            
-            return addTask(testTask);
-        };
-        
-        // Funzione di pulizia per rimuovere notifiche orfane
         window.cleanupNotifications = function() {
             console.log('🧹 Pulizia notifiche orfane...');
             
             const taskIds = tasks.map(t => t.id);
             const originalLength = notifications.length;
             
-            // Mantieni solo notifiche senza taskId o con taskId validi
             notifications = notifications.filter(notif => 
                 !notif.taskId || taskIds.includes(notif.taskId)
             );
@@ -1112,7 +764,6 @@
             return removedCount;
         };
 
-        // Funzione per pulire tutto (reset completo)
         window.resetApp = function() {
             if (confirm('Sei sicuro di voler cancellare TUTTI i dati? Questa operazione non può essere annullata.')) {
                 console.log('🗑️ Reset completo dell\'app...');
@@ -1132,61 +783,8 @@
             }
         };
 
-        // Funzione per testare le notifiche push
-        window.testPushNotification = function() {
-            sendLocalNotification('Test Notifica PWA', 'Questa è una notifica di test da Gruppo Visconti Tasks!', {
-                icon: '/icon-192x192.png',
-                badge: '/icon-72x72.png',
-                tag: 'test-notification'
-            });
-        };
-
-        // Funzione per forzare aggiornamento completo (utile per debug mobile)
-        window.forceFullRefresh = function() {
-            console.log('🔄 Forzando refresh completo...');
-            
-            // Cancella cache
-            if ('caches' in window) {
-                caches.keys().then(names => {
-                    names.forEach(name => {
-                        caches.delete(name);
-                    });
-                });
-            }
-            
-            // Ricarica dati
-            forceDataRefresh();
-            
-            // Mostra conferma
-            showAlert('success', 'Refresh Completato', 'App aggiornata completamente');
-            
-            console.log('✅ Refresh completo terminato');
-        };
-
-        // Funzione per diagnosticare problemi mobile
-        window.mobileDiagnostic = function() {
-            console.log('=== 📱 DIAGNOSTICA MOBILE ===');
-            console.log('User Agent:', navigator.userAgent);
-            console.log('Online:', navigator.onLine);
-            console.log('Service Worker supportato:', 'serviceWorker' in navigator);
-            console.log('PWA installata:', window.matchMedia('(display-mode: standalone)').matches);
-            console.log('Visibilità pagina:', document.visibilityState);
-            console.log('Tasks count:', tasks.length);
-            console.log('LocalStorage disponibile:', typeof(Storage) !== "undefined");
-            console.log('Cache disponibile:', 'caches' in window);
-            console.log('=============================');
-            
-            return {
-                userAgent: navigator.userAgent,
-                online: navigator.onLine,
-                serviceWorkerSupported: 'serviceWorker' in navigator,
-                isPWA: window.matchMedia('(display-mode: standalone)').matches,
-                pageVisibility: document.visibilityState,
-                tasksCount: tasks.length,
-                localStorage: typeof(Storage) !== "undefined",
-                cacheAPI: 'caches' in window
-            };
-        };
+        // Stato online iniziale
+        updateOnlineStatus();
     </script>
 </body>
 </html><!DOCTYPE html>
@@ -1445,6 +1043,126 @@
             100% { transform: scale(1); }
         }
 
+        /* Form per nuovo compito - SPOSTATO IN ALTO */
+        .task-form {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+
+        .task-form .section-title {
+            color: white;
+            border-bottom: 3px solid rgba(255, 255, 255, 0.3);
+            font-size: 1.8rem;
+            margin-bottom: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: white;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+        }
+
+        .form-group select option {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: white;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .btn-success {
+            background: rgba(86, 171, 47, 0.9);
+            color: white;
+            margin-left: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-success:hover {
+            background: #56ab2f;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(86, 171, 47, 0.3);
+        }
+
+        .btn-purple {
+            background: rgba(155, 89, 182, 0.9);
+            color: white;
+            margin-left: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-purple:hover {
+            background: #9b59b6;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(155, 89, 182, 0.3);
+        }
+
         /* Sezione notifiche */
         .notifications-section {
             background: #f8f9fa;
@@ -1493,85 +1211,6 @@
             color: #bdc3c7;
             font-size: 0.8rem;
             margin-left: 15px;
-        }
-
-        .task-form {
-            background: #f8f9fa;
-            padding: 25px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #2c3e50;
-        }
-
-        .form-group input, .form-group textarea, .form-group select {
-            width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s, box-shadow 0.3s;
-        }
-
-        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .form-group textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        .btn {
-            padding: 12px 25px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn-success {
-            background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
-            color: white;
-            margin-left: 10px;
-        }
-
-        .btn-success:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(86, 171, 47, 0.3);
         }
 
         .tasks-section {
@@ -1909,6 +1548,14 @@
             .logo-text {
                 font-size: 2.2rem;
             }
+
+            .task-form {
+                padding: 20px;
+            }
+
+            .task-form .section-title {
+                font-size: 1.4rem;
+            }
         }
     </style>
 </head>
@@ -1933,15 +1580,18 @@
                 </div>
             </div>
         </div>
-            <div class="install-prompt-content">
-                <div class="install-prompt-icon">📱</div>
-                <div class="install-prompt-text">
-                    <div class="install-prompt-title">Installa l'App</div>
-                    <div class="install-prompt-subtitle">Accesso rapido dal tuo dispositivo</div>
+
+        <!-- Update Prompt -->
+        <div class="update-prompt" id="updatePrompt">
+            <div class="update-prompt-content">
+                <div class="update-prompt-icon">🔄</div>
+                <div class="update-prompt-text">
+                    <div class="update-prompt-title">Aggiornamento Disponibile</div>
+                    <div class="update-prompt-subtitle">Nuova versione dell'app pronta</div>
                 </div>
-                <div class="install-prompt-buttons">
-                    <button class="install-btn" id="installBtn">Installa</button>
-                    <button class="install-btn dismiss-btn" id="dismissBtn">Più tardi</button>
+                <div class="update-prompt-buttons">
+                    <button class="update-btn" id="updateBtn">Aggiorna</button>
+                    <button class="update-btn dismiss-btn" id="dismissUpdateBtn">Ignora</button>
                 </div>
             </div>
         </div>
@@ -1960,38 +1610,7 @@
             <!-- Container per gli alert -->
             <div class="alert-container" id="alertContainer"></div>
 
-            <!-- Sezione Notifiche -->
-            <div class="notifications-section" id="notificationsSection">
-                <h2 class="section-title">🔔 Notifiche e Alert</h2>
-                <div id="notificationsList">
-                    <div class="empty-state" style="padding: 20px;">
-                        <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
-                        <p style="margin: 0;">Nessuna notifica al momento</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Statistiche -->
-            <div class="stats-section" id="statsSection">
-                <div class="stat-card">
-                    <div class="stat-number" id="totalTasks">0</div>
-                    <div class="stat-label">Totale Compiti</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="inProgressTasks">0</div>
-                    <div class="stat-label">In Corso</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="completedTasks">0</div>
-                    <div class="stat-label">Completati</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="pendingTasks">0</div>
-                    <div class="stat-label">Da Iniziare</div>
-                </div>
-            </div>
-
-            <!-- Form per nuovo compito -->
+            <!-- Form per nuovo compito - SPOSTATO IN ALTO DOPO L'INTESTAZIONE -->
             <div class="task-form">
                 <h2 class="section-title">➕ Nuovo Compito</h2>
                 <form id="taskForm">
@@ -2049,10 +1668,333 @@
                     
                     <button type="submit" class="btn btn-primary">➕ Aggiungi Compito</button>
                     <button type="button" class="btn btn-success" onclick="exportToExcel()">📊 Esporta Excel</button>
-                    <button type="button" class="btn" onclick="checkDeadlines()" style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; margin-left: 10px;">🔔 Verifica Scadenze</button>
+                    <button type="button" class="btn btn-purple" onclick="checkDeadlines()">🔔 Verifica Scadenze</button>
                 </form>
+            </div>
+
+            <!-- Statistiche -->
+            <div class="stats-section" id="statsSection">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalTasks">0</div>
+                    <div class="stat-label">Totale Compiti</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="inProgressTasks">0</div>
+                    <div class="stat-label">In Corso</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="completedTasks">0</div>
+                    <div class="stat-label">Completati</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="pendingTasks">0</div>
+                    <div class="stat-label">Da Iniziare</div>
+                </div>
+            </div>
+
+            <!-- Sezione Notifiche -->
+            <div class="notifications-section" id="notificationsSection">
+                <h2 class="section-title">🔔 Notifiche e Alert</h2>
+                <div id="notificationsList">
+                    <div class="empty-state" style="padding: 20px;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
+                        <p style="margin: 0;">Nessuna notifica al momento</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Lista compiti -->
             <div class="tasks-section">
-                <h2 class="section-title">
+                <h2 class="section-title">📌 Compiti Attivi</h2>
+                <div class="tasks-grid" id="tasksGrid">
+                    <div class="empty-state">
+                        <div style="font-size: 4rem; margin-bottom: 20px;">📋</div>
+                        <h3>Nessun compito presente</h3>
+                        <p>Aggiungi il tuo primo compito utilizzando il form sopra</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Array per memorizzare i compiti e le notifiche - con controlli di sicurezza
+        let tasks = [];
+        let notifications = [];
+        let alertCounter = 0;
+
+        // Inizializzazione sicura del localStorage
+        try {
+            const savedTasks = localStorage.getItem('tasks');
+            const savedNotifications = localStorage.getItem('notifications');
+            
+            if (savedTasks) {
+                tasks = JSON.parse(savedTasks) || [];
+            }
+            if (savedNotifications) {
+                notifications = JSON.parse(savedNotifications) || [];
+            }
+            
+            console.log('✅ Dati caricati dal localStorage');
+            console.log('Tasks caricati:', tasks.length);
+            console.log('Notifications caricate:', notifications.length);
+        } catch (error) {
+            console.error('❌ Errore nel caricamento localStorage:', error);
+            tasks = [];
+            notifications = [];
+        }
+
+        // Stati possibili
+        const taskStates = {
+            'da-iniziare': { label: '📋 Da Iniziare', class: 'status-da-iniziare' },
+            'in-corso': { label: '🚀 In Corso', class: 'status-in-corso' },
+            'in-revisione': { label: '👁️ In Revisione', class: 'status-in-revisione' },
+            'completato': { label: '✅ Completato', class: 'status-completato' },
+            'in-pausa': { label: '⏸️ In Pausa', class: 'status-in-pausa' },
+            'annullato': { label: '❌ Annullato', class: 'status-annullato' }
+        };
+
+        // Priorità
+        const priorities = {
+            'alta': { label: '🔴 Alta', class: 'priority-alta' },
+            'media': { label: '🟡 Media', class: 'priority-media' },
+            'bassa': { label: '🟢 Bassa', class: 'priority-bassa' }
+        };
+
+        // Funzione per generare ID univoco
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        // Funzione per formattare la data
+        function formatDate(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('it-IT');
+        }
+
+        // Funzione per salvare i compiti nel localStorage - con controlli
+        function saveTasks() {
+            try {
+                localStorage.setItem('tasks', JSON.stringify(tasks));
+                console.log('✅ Tasks salvati nel localStorage:', tasks.length, 'compiti');
+            } catch (error) {
+                console.error('❌ Errore nel salvataggio tasks:', error);
+                alert('Errore nel salvataggio! Controlla lo spazio di archiviazione del browser.');
+            }
+        }
+
+        // Funzione per salvare le notifiche - con controlli
+        function saveNotifications() {
+            try {
+                localStorage.setItem('notifications', JSON.stringify(notifications));
+                console.log('✅ Notifications salvate nel localStorage');
+            } catch (error) {
+                console.error('❌ Errore nel salvataggio notifications:', error);
+            }
+        }
+
+        // Funzione per mostrare alert
+        function showAlert(type, title, message, duration = 5000) {
+            alertCounter++;
+            const alertId = `alert-${alertCounter}`;
+            
+            const alertElement = document.createElement('div');
+            alertElement.id = alertId;
+            alertElement.className = `alert alert-${type}`;
+            alertElement.innerHTML = `
+                <button class="alert-close" onclick="closeAlert('${alertId}')">&times;</button>
+                <div class="alert-title">${title}</div>
+                <div class="alert-message">${message}</div>
+            `;
+            
+            document.getElementById('alertContainer').appendChild(alertElement);
+            
+            // Auto-dismiss dopo il tempo specificato
+            setTimeout(() => closeAlert(alertId), duration);
+        }
+
+        // Funzione per chiudere un alert
+        function closeAlert(alertId) {
+            const alert = document.getElementById(alertId);
+            if (alert) {
+                alert.style.animation = 'slideOutRight 0.3s ease-in';
+                setTimeout(() => {
+                    if (alert.parentNode) {
+                        alert.parentNode.removeChild(alert);
+                    }
+                }, 300);
+            }
+        }
+
+        // Funzione per aggiungere notifica - con controllo duplicati
+        function addNotification(type, title, message, taskId = null) {
+            const notification = {
+                id: generateId(),
+                type: type,
+                title: title,
+                message: message,
+                taskId: taskId,
+                timestamp: new Date().toISOString(),
+                read: false
+            };
+            
+            notifications.unshift(notification);
+            
+            // Mantieni solo le ultime 50 notifiche
+            if (notifications.length > 50) {
+                notifications = notifications.slice(0, 50);
+            }
+            
+            saveNotifications();
+            renderNotifications();
+            
+            // Mostra anche come alert
+            const icons = {
+                'deadline': '⏰',
+                'overdue': '🚨',
+                'completed': '✅',
+                'assigned': '📋',
+                'reminder': '🔔',
+                'info': 'ℹ️'
+            };
+            
+            showAlert(
+                type === 'overdue' ? 'danger' : 
+                type === 'deadline' ? 'warning' : 
+                type === 'completed' ? 'success' : 
+                type === 'info' ? 'info' : 'info',
+                `${icons[type] || '🔔'} ${title}`,
+                message
+            );
+        }
+
+        // Funzione per calcolare badge scadenza
+        function getDueBadge(dueDate) {
+            if (!dueDate) return '';
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const due = new Date(dueDate);
+            due.setHours(0, 0, 0, 0);
+            const diffTime = due - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays < 0) {
+                return `<span class="due-badge due-overdue">Scaduto</span>`;
+            } else if (diffDays === 0) {
+                return `<span class="due-badge due-today">Oggi</span>`;
+            } else if (diffDays <= 3) {
+                return `<span class="due-badge due-soon">${diffDays}g</span>`;
+            }
+            return '';
+        }
+
+        // Funzione per verificare scadenze
+        function checkDeadlines() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            let overdueCount = 0;
+            let todayCount = 0;
+            let soonCount = 0;
+            
+            tasks.forEach(task => {
+                if (!task.dueDate || task.status === 'completato' || task.status === 'annullato') return;
+                
+                const due = new Date(task.dueDate);
+                due.setHours(0, 0, 0, 0);
+                const diffTime = due - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays < 0) {
+                    overdueCount++;
+                    addNotification('overdue', 'Compito Scaduto!', 
+                        `Il compito "${task.title}" è scaduto da ${Math.abs(diffDays)} giorni`, task.id);
+                } else if (diffDays === 0) {
+                    todayCount++;
+                    addNotification('deadline', 'Scadenza Oggi!', 
+                        `Il compito "${task.title}" scade oggi`, task.id);
+                } else if (diffDays <= 3) {
+                    soonCount++;
+                    addNotification('reminder', 'Scadenza Imminente', 
+                        `Il compito "${task.title}" scade tra ${diffDays} giorni`, task.id);
+                }
+            });
+            
+            // Riepilogo
+            if (overdueCount === 0 && todayCount === 0 && soonCount === 0) {
+                showAlert('success', 'Tutto OK!', 'Non ci sono compiti in scadenza');
+            } else {
+                const summary = [];
+                if (overdueCount > 0) summary.push(`${overdueCount} scaduti`);
+                if (todayCount > 0) summary.push(`${todayCount} scadono oggi`);
+                if (soonCount > 0) summary.push(`${soonCount} in scadenza presto`);
+                
+                showAlert('warning', 'Riepilogo Scadenze', summary.join(', '));
+            }
+        }
+
+        // Funzione per renderizzare le notifiche - con debug migliorato
+        function renderNotifications() {
+            const notificationsList = document.getElementById('notificationsList');
+            
+            if (!notificationsList) {
+                console.error('❌ Elemento notificationsList non trovato');
+                return;
+            }
+            
+            console.log(`🔔 Rendering notifiche - Totale: ${notifications.length}`);
+            
+            if (notifications.length === 0) {
+                notificationsList.innerHTML = `
+                    <div class="empty-state" style="padding: 20px;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
+                        <p style="margin: 0;">Nessuna notifica al momento</p>
+                    </div>
+                `;
+                console.log('📭 Nessuna notifica da mostrare');
+                return;
+            }
+
+            const icons = {
+                'deadline': '⏰',
+                'overdue': '🚨',
+                'completed': '✅',
+                'assigned': '📋',
+                'reminder': '🔔',
+                'info': 'ℹ️'
+            };
+
+            const notificationsToShow = notifications.slice(0, 10);
+            console.log(`📋 Mostro ${notificationsToShow.length} notifiche`);
+
+            notificationsList.innerHTML = notificationsToShow.map(notif => `
+                <div class="notification-item" ${notif.taskId ? `data-task-id="${notif.taskId}"` : ''}>
+                    <div class="notification-icon">${icons[notif.type] || '🔔'}</div>
+                    <div class="notification-content">
+                        <div class="notification-title">${notif.title}</div>
+                        <div class="notification-text">${notif.message}</div>
+                    </div>
+                    <div class="notification-time">${getTimeAgo(notif.timestamp)}</div>
+                </div>
+            `).join('');
+            
+            console.log(`✅ Renderizzate ${notificationsToShow.length} notifiche nel DOM`);
+        }
+
+        // Funzione per calcolare il tempo trascorso
+        function getTimeAgo(timestamp) {
+            const now = new Date();
+            const time = new Date(timestamp);
+            const diffMs = now - time;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+            
+            if (diffMins < 1) return 'Ora';
+            if (diffMins < 60) return `${diffMins}m fa`;
+            if (diffHours < 24) return `${diffHours}h fa`;
+            return `${diffDays}g fa`;
+        }
+            <div class="alert
