@@ -1,793 +1,4 @@
-// Funzione per aggiungere un nuovo compito - versione robusta
-        function addTask(taskData) {
-            try {
-                console.log('🚀 Inizio aggiunta compito:', taskData);
-                
-                // Validazione dati
-                if (!taskData.title || !taskData.assignee) {
-                    throw new Error('Titolo e Assegnato sono obbligatori');
-                }
-                
-                const task = {
-                    id: generateId(),
-                    title: String(taskData.title).trim(),
-                    description: String(taskData.description || '').trim(),
-                    assignee: String(taskData.assignee).trim(),
-                    priority: taskData.priority || 'media',
-                    dueDate: taskData.dueDate || '',
-                    status: taskData.status || 'da-iniziare',
-                    reminderEnabled: Boolean(taskData.reminderEnabled),
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-                
-                console.log('📝 Compito creato:', task);
-                
-                // Aggiungi all'array
-                tasks.push(task);
-                console.log('📊 Totale compiti dopo aggiunta:', tasks.length);
-                
-                // Salva nel localStorage
-                saveTasks();
-                
-                // Aggiorna interfaccia
-                console.log('🔄 Aggiornamento interfaccia...');
-                renderTasks();
-                updateStats();
-                
-                // Notifica di successo
-                console.log('✅ Compito aggiunto con successo!');
-                showAlert('success', 'Compito Creato!', `"${task.title}" assegnato a ${task.assignee}`);
-                
-                // Notifica nell'elenco
-                addNotification('assigned', 'Nuovo Compito Creato', 
-                    `Compito "${task.title}" assegnato a ${task.assignee}`, task.id);
-                
-                // Promemoria se attivo
-                if (task.reminderEnabled && task.dueDate) {
-                    scheduleReminder(task);
-                }
-                
-                return task;
-                
-            } catch (error) {
-                console.error('❌ Errore nell\'aggiunta del compito:', error);
-                showAlert('danger', 'Errore!', error.message || 'Impossibile aggiungere il compito');
-                return null;
-            }
-        }
-
-        // Funzione per aggiornare lo stato di un compito
-        function updateTaskStatus(taskId, newStatus) {
-            const task = tasks.find(t => t.id === taskId);
-            if (task) {
-                const oldStatus = task.status;
-                task.status = newStatus;
-                task.updatedAt = new Date().toISOString();
-                saveTasks();
-                renderTasks();
-                updateStats();
-                
-                // Notifica cambio stato
-                if (newStatus === 'completato' && oldStatus !== 'completato') {
-                    addNotification('completed', 'Compito Completato!', 
-                        `Il compito "${task.title}" è stato completato`, task.id);
-                } else if (newStatus === 'in-corso' && oldStatus === 'da-iniziare') {
-                    addNotification('reminder', 'Compito Iniziato', 
-                        `Il lavoro su "${task.title}" è iniziato`, task.id);
-                }
-            }
-        }
-
-        // Funzione per programmare promemoria
-        function scheduleReminder(task) {
-            if (!task.dueDate) return;
-            
-            const now = new Date();
-            const dueDate = new Date(task.dueDate);
-            const reminderDate = new Date(dueDate);
-            reminderDate.setDate(reminderDate.getDate() - 1); // 1 giorno prima
-            
-            if (reminderDate > now) {
-                const timeUntilReminder = reminderDate.getTime() - now.getTime();
-                setTimeout(() => {
-                    if (task.status !== 'completato' && task.status !== 'annullato') {
-                        addNotification('reminder', 'Promemoria Scadenza', 
-                            `Il compito "${task.title}" scade domani!`, task.id);
-                    }
-                }, timeUntilReminder);
-            }
-        }
-
-        // Funzione per eliminare un compito e le sue notifiche - VERSIONE CORRETTA
-        function deleteTask(taskId) {
-            if (confirm('Sei sicuro di voler eliminare questo compito? Verranno rimosse anche tutte le notifiche correlate.')) {
-                try {
-                    console.log(`🗑️ Eliminazione compito ID: ${taskId}`);
-                    
-                    // Trova il compito da eliminare per il messaggio
-                    const taskToDelete = tasks.find(t => t.id === taskId);
-                    const taskTitle = taskToDelete ? taskToDelete.title : 'Compito sconosciuto';
-                    
-                    // Conta le notifiche correlate PRIMA dell'eliminazione
-                    const relatedNotifications = notifications.filter(n => n.taskId === taskId);
-                    console.log(`📋 Trovate ${relatedNotifications.length} notifiche correlate al compito "${taskTitle}"`);
-                    
-                    // Rimuovi il compito dall'array
-                    const originalTasksLength = tasks.length;
-                    tasks = tasks.filter(t => t.id !== taskId);
-                    
-                    // Rimuovi TUTTE le notifiche correlate a questo compito
-                    const originalNotificationsLength = notifications.length;
-                    notifications = notifications.filter(n => n.taskId !== taskId);
-                    
-                    const removedNotifications = originalNotificationsLength - notifications.length;
-                    
-                    if (tasks.length < originalTasksLength) {
-                        console.log(`✅ Compito "${taskTitle}" rimosso dall'array`);
-                        console.log(`🔔 Rimosse ${removedNotifications} notifiche correlate`);
-                        
-                        // Salva i dati aggiornati
-                        saveTasks();
-                        saveNotifications();
-                        
-                        // Aggiorna TUTTO l'interfaccia
-                        renderTasks();
-                        updateStats();
-                        renderNotifications(); // Questo dovrebbe aggiornare la sezione notifiche
-                        
-                        // Mostra notifica di eliminazione
-                        showAlert('info', 'Compito Eliminato', 
-                            `"${taskTitle}" eliminato${removedNotifications > 0 ? ` insieme a ${removedNotifications} notifiche` : ''}`);
-                        
-                    } else {
-                        console.error('❌ Compito non trovato per l\'eliminazione');
-                        showAlert('warning', 'Attenzione', 'Compito non trovato');
-                    }
-                    
-                } catch (error) {
-                    console.error('❌ Errore nell\'eliminazione:', error);
-                    showAlert('danger', 'Errore!', 'Impossibile eliminare il compito: ' + error.message);
-                }
-            }
-        }
-
-        // Funzione per renderizzare i compiti - VERSIONE CORRETTA SENZA LIMITI
-        function renderTasks() {
-            const tasksGrid = document.getElementById('tasksGrid');
-            console.log('Renderizzando compiti. Tasks array:', tasks);
-            console.log('📊 Totale compiti da renderizzare:', tasks.length);
-            
-            if (!tasks || tasks.length === 0) {
-                tasksGrid.innerHTML = `
-                    <div class="empty-state">
-                        <div style="font-size: 4rem; margin-bottom: 20px;">📋</div>
-                        <h3>Nessun compito presente</h3>
-                        <p>Aggiungi il tuo primo compito utilizzando il form sopra</p>
-                    </div>
-                `;
-                return;
-            }
-
-            // Renderizza TUTTI i compiti senza limiti
-            tasksGrid.innerHTML = tasks.map((task, index) => {
-                console.log(`📋 Rendering compito ${index + 1}:`, task.title);
-                return `
-                    <div class="task-card">
-                        <div class="task-title">${task.title}</div>
-                        <div class="task-description">${task.description || 'Nessuna descrizione'}</div>
-                        
-                        <div class="task-meta">
-                            <div class="task-assignee">👤 ${task.assignee}</div>
-                            <div class="task-date">
-                                ${formatDate(task.dueDate) || 'Nessuna scadenza'}
-                                ${getDueBadge(task.dueDate)}
-                            </div>
-                        </div>
-                        
-                        <div class="task-meta">
-                            <div class="task-priority ${priorities[task.priority].class}">
-                                ${priorities[task.priority].label}
-                            </div>
-                            <div class="task-date">Creato: ${formatDate(task.createdAt.split('T')[0])}</div>
-                        </div>
-                        
-                        <div class="task-status">
-                            <select class="status-select" onchange="updateTaskStatus('${task.id}', this.value)">
-                                ${Object.keys(taskStates).map(state => 
-                                    `<option value="${state}" ${task.status === state ? 'selected' : ''}>
-                                        ${taskStates[state].label}
-                                    </option>`
-                                ).join('')}
-                            </select>
-                            <button onclick="deleteTask('${task.id}')" style="background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer;">🗑️</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            console.log(`✅ Renderizzati tutti i ${tasks.length} compiti nel DOM`);
-        }
-
-        // Funzione per aggiornare le statistiche
-        function updateStats() {
-            const totalTasks = tasks.length;
-            const inProgressTasks = tasks.filter(t => t.status === 'in-corso').length;
-            const completedTasks = tasks.filter(t => t.status === 'completato').length;
-            const pendingTasks = tasks.filter(t => t.status === 'da-iniziare').length;
-
-            document.getElementById('totalTasks').textContent = totalTasks;
-            document.getElementById('inProgressTasks').textContent = inProgressTasks;
-            document.getElementById('completedTasks').textContent = completedTasks;
-            document.getElementById('pendingTasks').textContent = pendingTasks;
-        }
-
-        // Funzione per esportare in Excel
-        function exportToExcel() {
-            if (tasks.length === 0) {
-                alert('Non ci sono compiti da esportare!');
-                return;
-            }
-
-            const worksheet_data = tasks.map(task => ({
-                'ID': task.id,
-                'Titolo': task.title,
-                'Descrizione': task.description || '',
-                'Assegnato a': task.assignee,
-                'Priorità': priorities[task.priority].label,
-                'Stato': taskStates[task.status].label,
-                'Scadenza': formatDate(task.dueDate) || '',
-                'Data Creazione': formatDate(task.createdAt.split('T')[0]),
-                'Ultimo Aggiornamento': formatDate(task.updatedAt.split('T')[0])
-            }));
-
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.json_to_sheet(worksheet_data);
-
-            // Styling delle colonne
-            const range = XLSX.utils.decode_range(ws['!ref']);
-            for (let col = range.s.c; col <= range.e.c; col++) {
-                const address = XLSX.utils.encode_col(col) + "1";
-                if (!ws[address]) continue;
-                ws[address].s = {
-                    font: { bold: true },
-                    fill: { fgColor: { rgb: "EEEEEE" } }
-                };
-            }
-
-            XLSX.utils.book_append_sheet(wb, ws, "Compiti");
-            
-            const filename = `compiti_gruppo_visconti_${new Date().toISOString().split('T')[0]}.xlsx`;
-            XLSX.writeFile(wb, filename);
-        }
-
-        // === PWA FUNCTIONALITY ===
-        
-        // Versione dell'app per forzare aggiornamenti
-        const APP_VERSION = 'v2.0.1';
-        const APP_CACHE_KEY = 'gv-tasks-version';
-        
-        // Service Worker Registration con controllo esistenza
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                // Controlla se il service worker esiste prima di registrarlo
-                fetch('/sw.js', { method: 'HEAD' })
-                    .then(response => {
-                        if (response.ok) {
-                            return navigator.serviceWorker.register('/sw.js');
-                        } else {
-                            console.log('⚠️ Service Worker non trovato, app funziona in modalità normale');
-                            return null;
-                        }
-                    })
-                    .then(function(registration) {
-                        if (registration) {
-                            console.log('✅ Service Worker registrato:', registration.scope);
-                            
-                            // Controlla aggiornamenti periodicamente
-                            setInterval(() => {
-                                registration.update();
-                            }, 60000); // Ogni minuto
-                            
-                            // Gestisci aggiornamento del service worker
-                            registration.addEventListener('updatefound', () => {
-                                const newWorker = registration.installing;
-                                newWorker.addEventListener('statechange', () => {
-                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                        showUpdatePrompt(registration);
-                                    }
-                                });
-                            });
-                        }
-                    })
-                    .catch(function(error) {
-                        console.log('⚠️ Service Worker non disponibile:', error.message);
-                        console.log('📱 App funziona in modalità normale senza cache offline');
-                    });
-            });
-        } else {
-            console.log('⚠️ Service Worker non supportato da questo browser');
-        }
-
-        // Funzione per mostrare il prompt di aggiornamento
-        function showUpdatePrompt(registration) {
-            const updatePrompt = document.getElementById('updatePrompt');
-            const updateBtn = document.getElementById('updateBtn');
-            const dismissUpdateBtn = document.getElementById('dismissUpdateBtn');
-            
-            // Controlla che tutti gli elementi esistano
-            if (!updatePrompt || !updateBtn || !dismissUpdateBtn) {
-                console.log('⚠️ Elementi update prompt non trovati, skip');
-                return;
-            }
-            
-            updatePrompt.style.display = 'block';
-            
-            updateBtn.onclick = () => {
-                // Forza l'aggiornamento
-                if (registration.waiting) {
-                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-                }
-                updatePrompt.style.display = 'none';
-                
-                // Ricarica la pagina per applicare gli aggiornamenti
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-            };
-            
-            dismissUpdateBtn.onclick = () => {
-                updatePrompt.style.display = 'none';
-            };
-        }
-
-        // Controlla versione dell'app e forza aggiornamento se necessario
-        function checkAppVersion() {
-            const savedVersion = localStorage.getItem(APP_CACHE_KEY);
-            if (savedVersion !== APP_VERSION) {
-                console.log('🔄 Nuova versione rilevata:', APP_VERSION);
-                localStorage.setItem(APP_CACHE_KEY, APP_VERSION);
-                
-                // Forza ricarica delle risorse
-                if ('caches' in window) {
-                    caches.keys().then(names => {
-                        names.forEach(name => {
-                            caches.delete(name);
-                        });
-                    });
-                }
-                
-                showAlert('info', 'App Aggiornata!', `Versione ${APP_VERSION} caricata con successo`);
-            }
-        }
-
-        // Forza aggiornamento dei dati se la pagina viene ricaricata
-        function forceDataRefresh() {
-            // Ricarica dati dal localStorage 
-            try {
-                const savedTasks = localStorage.getItem('tasks');
-                const savedNotifications = localStorage.getItem('notifications');
-                
-                if (savedTasks) {
-                    tasks = JSON.parse(savedTasks) || [];
-                }
-                if (savedNotifications) {
-                    notifications = JSON.parse(savedNotifications) || [];
-                }
-                
-                // Re-render tutto
-                renderTasks();
-                updateStats();
-                renderNotifications();
-                
-                console.log('🔄 Dati aggiornati forzatamente');
-            } catch (error) {
-                console.error('❌ Errore nel refresh dei dati:', error);
-            }
-        }
-
-        // Gestisci visibilità della pagina (quando l'utente torna all'app)
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                console.log('👁️ App tornata in primo piano');
-                forceDataRefresh();
-                
-                // Controlla se ci sono aggiornamenti del service worker
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.getRegistration().then(registration => {
-                        if (registration) {
-                            registration.update();
-                        }
-                    });
-                }
-            }
-        });
-
-        // Gestisci evento di focus della finestra
-        window.addEventListener('focus', function() {
-            console.log('🎯 Finestra in focus');
-            forceDataRefresh();
-        });
-
-        // Aggiungi meta tag per prevenire cache
-        function addCacheBustingMeta() {
-            const meta = document.createElement('meta');
-            meta.httpEquiv = 'Cache-Control';
-            meta.content = 'no-cache, no-store, must-revalidate';
-            document.head.appendChild(meta);
-            
-            const meta2 = document.createElement('meta');
-            meta2.httpEquiv = 'Pragma';
-            meta2.content = 'no-cache';
-            document.head.appendChild(meta2);
-            
-            const meta3 = document.createElement('meta');
-            meta3.httpEquiv = 'Expires';
-            meta3.content = '0';
-            document.head.appendChild(meta3);
-        }
-
-        // Install Prompt con controlli di sicurezza
-        let deferredPrompt;
-        const installPrompt = document.getElementById('installPrompt');
-        const installBtn = document.getElementById('installBtn');
-        const dismissBtn = document.getElementById('dismissBtn');
-
-        // Mostra prompt di installazione solo se tutti gli elementi esistono
-        window.addEventListener('beforeinstallprompt', (e) => {
-            console.log('💾 Install prompt disponibile');
-            e.preventDefault();
-            deferredPrompt = e;
-            
-            // Controlla se l'utente ha già rifiutato e se gli elementi esistono
-            if (!localStorage.getItem('installDismissed') && installPrompt) {
-                installPrompt.style.display = 'block';
-            }
-        });
-
-        // Gestione click installa (con controllo esistenza)
-        if (installBtn) {
-            installBtn.addEventListener('click', async () => {
-                if (!deferredPrompt) return;
-                
-                try {
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    
-                    console.log('📱 Install outcome:', outcome);
-                    
-                    if (outcome === 'accepted') {
-                        showAlert('success', 'App Installata!', 'Gruppo Visconti Tasks è ora disponibile nella tua home screen');
-                    }
-                    
-                    deferredPrompt = null;
-                    if (installPrompt) {
-                        installPrompt.style.display = 'none';
-                    }
-                } catch (error) {
-                    console.log('⚠️ Errore nell\'installazione PWA:', error);
-                }
-            });
-        }
-
-        // Gestione click dismetti (con controllo esistenza)
-        if (dismissBtn) {
-            dismissBtn.addEventListener('click', () => {
-                if (installPrompt) {
-                    installPrompt.style.display = 'none';
-                }
-                localStorage.setItem('installDismissed', 'true');
-                console.log('📱 Install prompt dismisso');
-            });
-        }
-
-        // Detect quando l'app è installata
-        window.addEventListener('appinstalled', (e) => {
-            console.log('✅ PWA installata');
-            showAlert('success', 'Installazione Completata!', 'L\'app è ora disponibile sul tuo dispositivo');
-            if (installPrompt) {
-                installPrompt.style.display = 'none';
-            }
-        });
-
-        // Online/Offline Status con controlli di sicurezza
-        const offlineIndicator = document.getElementById('offlineIndicator');
-
-        function updateOnlineStatus() {
-            if (navigator.onLine) {
-                if (offlineIndicator) {
-                    offlineIndicator.style.display = 'none';
-                }
-                console.log('🌐 App online');
-            } else {
-                if (offlineIndicator) {
-                    offlineIndicator.style.display = 'block';
-                }
-                console.log('📵 App offline');
-                showAlert('warning', 'Modalità Offline', 'I dati verranno salvati localmente e sincronizzati quando tornerai online');
-            }
-        }
-
-        // Event listeners sicuri per online/offline
-        window.addEventListener('online', updateOnlineStatus);
-        window.addEventListener('offline', updateOnlineStatus);
-
-        // Push Notifications (se supportate)
-        async function requestNotificationPermission() {
-            if ('Notification' in window) {
-                const permission = await Notification.requestPermission();
-                console.log('🔔 Notification permission:', permission);
-                return permission === 'granted';
-            }
-            return false;
-        }
-
-        // Funzione per inviare notifiche locali
-        function sendLocalNotification(title, message, options = {}) {
-            if ('Notification' in window && Notification.permission === 'granted') {
-                const notification = new Notification(title, {
-                    body: message,
-                    icon: '/icon-192x192.png',
-                    badge: '/icon-72x72.png',
-                    ...options
-                });
-
-                notification.onclick = function() {
-                    window.focus();
-                    notification.close();
-                };
-
-                return notification;
-            }
-        }
-
-        // Override della funzione addNotification per includere push notifications
-        const originalAddNotification = addNotification;
-        addNotification = function(type, title, message, taskId = null) {
-            // Chiama la funzione originale
-            originalAddNotification(type, title, message, taskId);
-            
-            // Invia notifica push se appropriato
-            if (type === 'overdue' || type === 'deadline') {
-                sendLocalNotification(title, message, {
-                    tag: taskId || 'general',
-                    requireInteraction: true
-                });
-            }
-        };
-
-        // Event listener per il form - versione robusta
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('🎯 DOM caricato, inizializzazione form...');
-            
-            const taskForm = document.getElementById('taskForm');
-            if (!taskForm) {
-                console.error('❌ Form non trovato!');
-                return;
-            }
-            
-            taskForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                console.log('📝 Form sottomesso');
-                
-                try {
-                    // Recupera i valori dai campi
-                    const titleElement = document.getElementById('taskTitle');
-                    const assigneeElement = document.getElementById('taskAssignee');
-                    const descriptionElement = document.getElementById('taskDescription');
-                    const priorityElement = document.getElementById('taskPriority');
-                    const dueDateElement = document.getElementById('taskDueDate');
-                    const statusElement = document.getElementById('taskStatus');
-                    const reminderElement = document.getElementById('enableReminder');
-                    
-                    if (!titleElement || !assigneeElement) {
-                        throw new Error('Campi del form non trovati');
-                    }
-                    
-                    const title = titleElement.value.trim();
-                    const assignee = assigneeElement.value.trim();
-                    
-                    console.log('📋 Dati form:', { title, assignee });
-                    
-                    if (!title) {
-                        throw new Error('Il titolo è obbligatorio');
-                    }
-                    
-                    if (!assignee) {
-                        throw new Error('Il campo "Assegnato a" è obbligatorio');
-                    }
-                    
-                    const formData = {
-                        title: title,
-                        description: descriptionElement ? descriptionElement.value.trim() : '',
-                        assignee: assignee,
-                        priority: priorityElement ? priorityElement.value : 'media',
-                        dueDate: dueDateElement ? dueDateElement.value : '',
-                        status: statusElement ? statusElement.value : 'da-iniziare',
-                        reminderEnabled: reminderElement ? reminderElement.checked : false
-                    };
-                    
-                    console.log('📦 Dati completi da inviare:', formData);
-                    
-                    // Aggiungi il compito
-                    const result = addTask(formData);
-                    
-                    if (result) {
-                        // Reset form solo se successo
-                        this.reset();
-                        console.log('✅ Form resettato');
-                        
-                        // Feedback visivo
-                        const submitBtn = this.querySelector('button[type="submit"]');
-                        if (submitBtn) {
-                            const originalText = submitBtn.textContent;
-                            const originalStyle = submitBtn.style.background;
-                            
-                            submitBtn.textContent = '✅ Compito Aggiunto!';
-                            submitBtn.style.background = '#27ae60';
-                            
-                            setTimeout(() => {
-                                submitBtn.textContent = originalText;
-                                submitBtn.style.background = originalStyle;
-                            }, 2000);
-                        }
-                    }
-                    
-                } catch (error) {
-                    console.error('❌ Errore nel form:', error);
-                    showAlert('danger', 'Errore!', error.message);
-                }
-            });
-            
-            console.log('✅ Form listener aggiunto con successo');
-        });
-
-        // Inizializzazione con controlli robusti e gestione mobile
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 Inizializzazione app...');
-            console.log('📊 Tasks array:', tasks);
-            console.log('📱 Tasks nel localStorage:', localStorage.getItem('tasks'));
-            
-            // Aggiungi meta tag anti-cache
-            addCacheBustingMeta();
-            
-            // Controlla versione app
-            checkAppVersion();
-            
-            try {
-                renderTasks();
-                updateStats();
-                renderNotifications();
-                
-                console.log('✅ Interfaccia inizializzata');
-                
-                // Controlla scadenze all'avvio
-                setTimeout(() => {
-                    console.log('🔔 Controllo scadenze...');
-                    checkDeadlines();
-                }, 2000);
-                
-                // Controlla scadenze periodicamente (ogni ora)
-                setInterval(checkDeadlines, 3600000);
-                
-                // Richiedi permessi notifiche dopo un po'
-                setTimeout(() => {
-                    requestNotificationPermission();
-                }, 3000);
-                
-                // Su mobile, forza refresh ogni 30 secondi se la app è attiva
-                if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-                    console.log('📱 Dispositivo mobile rilevato');
-                    setInterval(() => {
-                        if (!document.hidden) {
-                            forceDataRefresh();
-                        }
-                    }, 30000); // Ogni 30 secondi
-                }
-                
-            } catch (error) {
-                console.error('❌ Errore nell\'inizializzazione:', error);
-                showAlert('danger', 'Errore!', 'Problema nell\'inizializzazione dell\'app');
-            }
-        });
-        
-        // Funzione di debug migliorata
-        window.debugApp = function() {
-            console.log('=== 🔍 DEBUG APP ===');
-            console.log('Tasks array length:', tasks.length);
-            console.log('Tasks array:', tasks);
-            console.log('Tasks nel localStorage:', localStorage.getItem('tasks'));
-            console.log('Notifications array length:', notifications.length);
-            console.log('Notifications array:', notifications);
-            console.log('===================');
-            
-            // Testa se il DOM è OK
-            const form = document.getElementById('taskForm');
-            const grid = document.getElementById('tasksGrid');
-            console.log('Form trovato:', !!form);
-            console.log('Grid trovato:', !!grid);
-            
-            return {
-                tasks: tasks,
-                notifications: notifications,
-                formExists: !!form,
-                gridExists: !!grid
-            };
-        };
-
-        // Funzioni di debug aggiuntive per testing
-        window.countTasks = function() {
-            console.log('=== 📊 CONTEGGIO COMPITI ===');
-            console.log('Tasks in memoria:', tasks.length);
-            console.log('Tasks nel localStorage:', JSON.parse(localStorage.getItem('tasks') || '[]').length);
-            console.log('Tasks nel DOM:', document.querySelectorAll('.task-card').length);
-            console.log('Lista compiti:', tasks.map((t, i) => `${i+1}. ${t.title}`));
-            console.log('===========================');
-            
-            return {
-                inMemory: tasks.length,
-                inStorage: JSON.parse(localStorage.getItem('tasks') || '[]').length,
-                inDOM: document.querySelectorAll('.task-card').length,
-                list: tasks.map(t => t.title)
-            };
-        };
-
-        window.forceRenderAllTasks = function() {
-            console.log('🔄 Forzando re-render di tutti i compiti...');
-            renderTasks();
-            updateStats();
-            console.log('✅ Re-render completato');
-        };
-
-        window.cleanupNotifications = function() {
-            console.log('🧹 Pulizia notifiche orfane...');
-            
-            const taskIds = tasks.map(t => t.id);
-            const originalLength = notifications.length;
-            
-            notifications = notifications.filter(notif => 
-                !notif.taskId || taskIds.includes(notif.taskId)
-            );
-            
-            const removedCount = originalLength - notifications.length;
-            
-            if (removedCount > 0) {
-                console.log(`🗑️ Rimosse ${removedCount} notifiche orfane`);
-                saveNotifications();
-                renderNotifications();
-                showAlert('info', 'Pulizia Completata', `Rimosse ${removedCount} notifiche obsolete`);
-            } else {
-                console.log('✅ Nessuna notifica orfana trovata');
-                showAlert('success', 'Tutto Pulito', 'Nessuna notifica obsoleta da rimuovere');
-            }
-            
-            return removedCount;
-        };
-
-        window.resetApp = function() {
-            if (confirm('Sei sicuro di voler cancellare TUTTI i dati? Questa operazione non può essere annullata.')) {
-                console.log('🗑️ Reset completo dell\'app...');
-                
-                tasks = [];
-                notifications = [];
-                
-                localStorage.removeItem('tasks');
-                localStorage.removeItem('notifications');
-                
-                renderTasks();
-                updateStats();
-                renderNotifications();
-                
-                showAlert('success', 'Reset Completato', 'Tutti i dati sono stati cancellati');
-                console.log('✅ App resettata completamente');
-            }
-        };
-
-        // Stato online iniziale
-        updateOnlineStatus();
-    </script>
-</body>
-</html><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
@@ -1610,24 +821,27 @@
             <!-- Container per gli alert -->
             <div class="alert-container" id="alertContainer"></div>
 
-            <!-- Form per nuovo compito - SPOSTATO IN ALTO DOPO L'INTESTAZIONE -->
+            <!-- SEZIONE 2: NUOVO COMPITO - POSIZIONATA IN ALTO -->
             <div class="task-form">
                 <h2 class="section-title">➕ Nuovo Compito</h2>
+                <p style="margin-bottom: 20px; opacity: 0.9; font-size: 1.1rem;">
+                    🚀 Crea rapidamente un nuovo compito per il team
+                </p>
                 <form id="taskForm">
                     <div class="form-group">
                         <label for="taskTitle">Titolo Compito *</label>
-                        <input type="text" id="taskTitle" required placeholder="Es: Preparare presentazione Q4">
+                        <input type="text" id="taskTitle" required placeholder="Es: Preparare presentazione Q4" maxlength="100">
                     </div>
                     
                     <div class="form-group">
                         <label for="taskDescription">Descrizione</label>
-                        <textarea id="taskDescription" placeholder="Descrivi dettagliatamente il compito da svolgere..."></textarea>
+                        <textarea id="taskDescription" placeholder="Descrivi dettagliatamente il compito da svolgere..." maxlength="500"></textarea>
                     </div>
                     
                     <div class="form-row">
                         <div class="form-group">
                             <label for="taskAssignee">Assegnato a *</label>
-                            <input type="text" id="taskAssignee" required placeholder="Nome e cognome">
+                            <input type="text" id="taskAssignee" required placeholder="Nome e cognome" maxlength="50">
                         </div>
                         
                         <div class="form-group">
@@ -1660,15 +874,23 @@
                     </div>
 
                     <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="enableReminder" style="margin-right: 8px;">
-                            Attiva promemoria automatico (1 giorno prima della scadenza)
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="enableReminder" style="margin-right: 12px; transform: scale(1.2);">
+                            <span>🔔 Attiva promemoria automatico (1 giorno prima della scadenza)</span>
                         </label>
                     </div>
                     
-                    <button type="submit" class="btn btn-primary">➕ Aggiungi Compito</button>
-                    <button type="button" class="btn btn-success" onclick="exportToExcel()">📊 Esporta Excel</button>
-                    <button type="button" class="btn btn-purple" onclick="checkDeadlines()">🔔 Verifica Scadenze</button>
+                    <div style="margin-top: 25px; display: flex; gap: 15px; flex-wrap: wrap;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1; min-width: 200px;">
+                            ➕ Aggiungi Compito
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="exportToExcel()" style="flex: 0 0 auto;">
+                            📊 Esporta Excel
+                        </button>
+                        <button type="button" class="btn btn-purple" onclick="checkDeadlines()" style="flex: 0 0 auto;">
+                            🔔 Verifica Scadenze
+                        </button>
+                    </div>
                 </form>
             </div>
 
@@ -1718,7 +940,7 @@
     </div>
 
     <script>
-        // Array per memorizzare i compiti e le notifiche - con controlli di sicurezza
+        // Array per memorizzare i compiti e le notifiche
         let tasks = [];
         let notifications = [];
         let alertCounter = 0;
@@ -1736,8 +958,6 @@
             }
             
             console.log('✅ Dati caricati dal localStorage');
-            console.log('Tasks caricati:', tasks.length);
-            console.log('Notifications caricate:', notifications.length);
         } catch (error) {
             console.error('❌ Errore nel caricamento localStorage:', error);
             tasks = [];
@@ -1773,18 +993,18 @@
             return date.toLocaleDateString('it-IT');
         }
 
-        // Funzione per salvare i compiti nel localStorage - con controlli
+        // Funzione per salvare i compiti nel localStorage
         function saveTasks() {
             try {
                 localStorage.setItem('tasks', JSON.stringify(tasks));
-                console.log('✅ Tasks salvati nel localStorage:', tasks.length, 'compiti');
+                console.log('✅ Tasks salvati nel localStorage');
             } catch (error) {
                 console.error('❌ Errore nel salvataggio tasks:', error);
                 alert('Errore nel salvataggio! Controlla lo spazio di archiviazione del browser.');
             }
         }
 
-        // Funzione per salvare le notifiche - con controlli
+        // Funzione per salvare le notifiche
         function saveNotifications() {
             try {
                 localStorage.setItem('notifications', JSON.stringify(notifications));
@@ -1827,7 +1047,7 @@
             }
         }
 
-        // Funzione per aggiungere notifica - con controllo duplicati
+        // Funzione per aggiungere notifica
         function addNotification(type, title, message, taskId = null) {
             const notification = {
                 id: generateId(),
@@ -1935,7 +1155,7 @@
             }
         }
 
-        // Funzione per renderizzare le notifiche - con debug migliorato
+        // Funzione per renderizzare le notifiche
         function renderNotifications() {
             const notificationsList = document.getElementById('notificationsList');
             
@@ -1944,8 +1164,6 @@
                 return;
             }
             
-            console.log(`🔔 Rendering notifiche - Totale: ${notifications.length}`);
-            
             if (notifications.length === 0) {
                 notificationsList.innerHTML = `
                     <div class="empty-state" style="padding: 20px;">
@@ -1953,7 +1171,6 @@
                         <p style="margin: 0;">Nessuna notifica al momento</p>
                     </div>
                 `;
-                console.log('📭 Nessuna notifica da mostrare');
                 return;
             }
 
@@ -1967,7 +1184,6 @@
             };
 
             const notificationsToShow = notifications.slice(0, 10);
-            console.log(`📋 Mostro ${notificationsToShow.length} notifiche`);
 
             notificationsList.innerHTML = notificationsToShow.map(notif => `
                 <div class="notification-item" ${notif.taskId ? `data-task-id="${notif.taskId}"` : ''}>
@@ -1979,8 +1195,6 @@
                     <div class="notification-time">${getTimeAgo(notif.timestamp)}</div>
                 </div>
             `).join('');
-            
-            console.log(`✅ Renderizzate ${notificationsToShow.length} notifiche nel DOM`);
         }
 
         // Funzione per calcolare il tempo trascorso
@@ -1997,4 +1211,297 @@
             if (diffHours < 24) return `${diffHours}h fa`;
             return `${diffDays}g fa`;
         }
-            <div class="alert
+
+        // Funzione per aggiungere un nuovo compito
+        function addTask(taskData) {
+            try {
+                console.log('🚀 Inizio aggiunta compito:', taskData);
+                
+                // Validazione dati
+                if (!taskData.title || !taskData.assignee) {
+                    throw new Error('Titolo e Assegnato sono obbligatori');
+                }
+                
+                const task = {
+                    id: generateId(),
+                    title: String(taskData.title).trim(),
+                    description: String(taskData.description || '').trim(),
+                    assignee: String(taskData.assignee).trim(),
+                    priority: taskData.priority || 'media',
+                    dueDate: taskData.dueDate || '',
+                    status: taskData.status || 'da-iniziare',
+                    reminderEnabled: Boolean(taskData.reminderEnabled),
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                
+                // Aggiungi all'array
+                tasks.push(task);
+                
+                // Salva nel localStorage
+                saveTasks();
+                
+                // Aggiorna interfaccia
+                renderTasks();
+                updateStats();
+                
+                // Notifica di successo
+                showAlert('success', 'Compito Creato!', `"${task.title}" assegnato a ${task.assignee}`);
+                
+                // Notifica nell'elenco
+                addNotification('assigned', 'Nuovo Compito Creato', 
+                    `Compito "${task.title}" assegnato a ${task.assignee}`, task.id);
+                
+                return task;
+                
+            } catch (error) {
+                console.error('❌ Errore nell\'aggiunta del compito:', error);
+                showAlert('danger', 'Errore!', error.message || 'Impossibile aggiungere il compito');
+                return null;
+            }
+        }
+
+        // Funzione per aggiornare lo stato di un compito
+        function updateTaskStatus(taskId, newStatus) {
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                const oldStatus = task.status;
+                task.status = newStatus;
+                task.updatedAt = new Date().toISOString();
+                saveTasks();
+                renderTasks();
+                updateStats();
+                
+                // Notifica cambio stato
+                if (newStatus === 'completato' && oldStatus !== 'completato') {
+                    addNotification('completed', 'Compito Completato!', 
+                        `Il compito "${task.title}" è stato completato`, task.id);
+                } else if (newStatus === 'in-corso' && oldStatus === 'da-iniziare') {
+                    addNotification('reminder', 'Compito Iniziato', 
+                        `Il lavoro su "${task.title}" è iniziato`, task.id);
+                }
+            }
+        }
+
+        // Funzione per eliminare un compito
+        function deleteTask(taskId) {
+            if (confirm('Sei sicuro di voler eliminare questo compito? Verranno rimosse anche tutte le notifiche correlate.')) {
+                try {
+                    const taskToDelete = tasks.find(t => t.id === taskId);
+                    const taskTitle = taskToDelete ? taskToDelete.title : 'Compito sconosciuto';
+                    
+                    // Rimuovi il compito dall'array
+                    tasks = tasks.filter(t => t.id !== taskId);
+                    
+                    // Rimuovi TUTTE le notifiche correlate a questo compito
+                    notifications = notifications.filter(n => n.taskId !== taskId);
+                    
+                    // Salva i dati aggiornati
+                    saveTasks();
+                    saveNotifications();
+                    
+                    // Aggiorna l'interfaccia
+                    renderTasks();
+                    updateStats();
+                    renderNotifications();
+                    
+                    // Mostra notifica di eliminazione
+                    showAlert('info', 'Compito Eliminato', `"${taskTitle}" eliminato`);
+                    
+                } catch (error) {
+                    console.error('❌ Errore nell\'eliminazione:', error);
+                    showAlert('danger', 'Errore!', 'Impossibile eliminare il compito: ' + error.message);
+                }
+            }
+        }
+
+        // Funzione per renderizzare i compiti
+        function renderTasks() {
+            const tasksGrid = document.getElementById('tasksGrid');
+            
+            if (!tasks || tasks.length === 0) {
+                tasksGrid.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size: 4rem; margin-bottom: 20px;">📋</div>
+                        <h3>Nessun compito presente</h3>
+                        <p>Aggiungi il tuo primo compito utilizzando il form sopra</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Renderizza tutti i compiti
+            tasksGrid.innerHTML = tasks.map(task => `
+                <div class="task-card">
+                    <div class="task-title">${task.title}</div>
+                    <div class="task-description">${task.description || 'Nessuna descrizione'}</div>
+                    
+                    <div class="task-meta">
+                        <div class="task-assignee">👤 ${task.assignee}</div>
+                        <div class="task-date">
+                            ${formatDate(task.dueDate) || 'Nessuna scadenza'}
+                            ${getDueBadge(task.dueDate)}
+                        </div>
+                    </div>
+                    
+                    <div class="task-meta">
+                        <div class="task-priority ${priorities[task.priority].class}">
+                            ${priorities[task.priority].label}
+                        </div>
+                        <div class="task-date">Creato: ${formatDate(task.createdAt.split('T')[0])}</div>
+                    </div>
+                    
+                    <div class="task-status">
+                        <select class="status-select" onchange="updateTaskStatus('${task.id}', this.value)">
+                            ${Object.keys(taskStates).map(state => 
+                                `<option value="${state}" ${task.status === state ? 'selected' : ''}>
+                                    ${taskStates[state].label}
+                                </option>`
+                            ).join('')}
+                        </select>
+                        <button onclick="deleteTask('${task.id}')" style="background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer;">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Funzione per aggiornare le statistiche
+        function updateStats() {
+            const totalTasks = tasks.length;
+            const inProgressTasks = tasks.filter(t => t.status === 'in-corso').length;
+            const completedTasks = tasks.filter(t => t.status === 'completato').length;
+            const pendingTasks = tasks.filter(t => t.status === 'da-iniziare').length;
+
+            document.getElementById('totalTasks').textContent = totalTasks;
+            document.getElementById('inProgressTasks').textContent = inProgressTasks;
+            document.getElementById('completedTasks').textContent = completedTasks;
+            document.getElementById('pendingTasks').textContent = pendingTasks;
+        }
+
+        // Funzione per esportare in Excel
+        function exportToExcel() {
+            if (tasks.length === 0) {
+                alert('Non ci sono compiti da esportare!');
+                return;
+            }
+
+            const worksheet_data = tasks.map(task => ({
+                'ID': task.id,
+                'Titolo': task.title,
+                'Descrizione': task.description || '',
+                'Assegnato a': task.assignee,
+                'Priorità': priorities[task.priority].label,
+                'Stato': taskStates[task.status].label,
+                'Scadenza': formatDate(task.dueDate) || '',
+                'Data Creazione': formatDate(task.createdAt.split('T')[0]),
+                'Ultimo Aggiornamento': formatDate(task.updatedAt.split('T')[0])
+            }));
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(worksheet_data);
+
+            XLSX.utils.book_append_sheet(wb, ws, "Compiti");
+            
+            const filename = `compiti_gruppo_visconti_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, filename);
+        }
+
+        // Event listener per il form
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 DOM caricato, inizializzazione...');
+            
+            const taskForm = document.getElementById('taskForm');
+            if (!taskForm) {
+                console.error('❌ Form non trovato!');
+                return;
+            }
+            
+            taskForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                try {
+                    const titleElement = document.getElementById('taskTitle');
+                    const assigneeElement = document.getElementById('taskAssignee');
+                    const descriptionElement = document.getElementById('taskDescription');
+                    const priorityElement = document.getElementById('taskPriority');
+                    const dueDateElement = document.getElementById('taskDueDate');
+                    const statusElement = document.getElementById('taskStatus');
+                    const reminderElement = document.getElementById('enableReminder');
+                    
+                    if (!titleElement || !assigneeElement) {
+                        throw new Error('Campi del form non trovati');
+                    }
+                    
+                    const title = titleElement.value.trim();
+                    const assignee = assigneeElement.value.trim();
+                    
+                    if (!title) {
+                        throw new Error('Il titolo è obbligatorio');
+                    }
+                    
+                    if (!assignee) {
+                        throw new Error('Il campo "Assegnato a" è obbligatorio');
+                    }
+                    
+                    const formData = {
+                        title: title,
+                        description: descriptionElement ? descriptionElement.value.trim() : '',
+                        assignee: assignee,
+                        priority: priorityElement ? priorityElement.value : 'media',
+                        dueDate: dueDateElement ? dueDateElement.value : '',
+                        status: statusElement ? statusElement.value : 'da-iniziare',
+                        reminderEnabled: reminderElement ? reminderElement.checked : false
+                    };
+                    
+                    // Aggiungi il compito
+                    const result = addTask(formData);
+                    
+                    if (result) {
+                        // Reset form solo se successo
+                        this.reset();
+                        
+                        // Feedback visivo
+                        const submitBtn = this.querySelector('button[type="submit"]');
+                        if (submitBtn) {
+                            const originalText = submitBtn.textContent;
+                            const originalStyle = submitBtn.style.background;
+                            
+                            submitBtn.textContent = '✅ Compito Aggiunto!';
+                            submitBtn.style.background = '#27ae60';
+                            
+                            setTimeout(() => {
+                                submitBtn.textContent = originalText;
+                                submitBtn.style.background = originalStyle;
+                            }, 2000);
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Errore nel form:', error);
+                    showAlert('danger', 'Errore!', error.message);
+                }
+            });
+        });
+
+        // Inizializzazione
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                renderTasks();
+                updateStats();
+                renderNotifications();
+                
+                console.log('✅ Interfaccia inizializzata');
+                
+                // Controlla scadenze all'avvio
+                setTimeout(() => {
+                    checkDeadlines();
+                }, 2000);
+                
+            } catch (error) {
+                console.error('❌ Errore nell\'inizializzazione:', error);
+                showAlert('danger', 'Errore!', 'Problema nell\'inizializzazione dell\'app');
+            }
+        });
+    </script>
+</body>
+</html>
