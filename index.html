@@ -562,32 +562,46 @@
         const APP_VERSION = 'v2.0.1';
         const APP_CACHE_KEY = 'gv-tasks-version';
         
-        // Service Worker Registration con gestione aggiornamenti
+        // Service Worker Registration con controllo esistenza
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js')
+                // Controlla se il service worker esiste prima di registrarlo
+                fetch('/sw.js', { method: 'HEAD' })
+                    .then(response => {
+                        if (response.ok) {
+                            return navigator.serviceWorker.register('/sw.js');
+                        } else {
+                            console.log('⚠️ Service Worker non trovato, app funziona in modalità normale');
+                            return null;
+                        }
+                    })
                     .then(function(registration) {
-                        console.log('✅ Service Worker registrato:', registration.scope);
-                        
-                        // Controlla aggiornamenti periodicamente
-                        setInterval(() => {
-                            registration.update();
-                        }, 60000); // Ogni minuto
-                        
-                        // Gestisci aggiornamento del service worker
-                        registration.addEventListener('updatefound', () => {
-                            const newWorker = registration.installing;
-                            newWorker.addEventListener('statechange', () => {
-                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    showUpdatePrompt(registration);
-                                }
+                        if (registration) {
+                            console.log('✅ Service Worker registrato:', registration.scope);
+                            
+                            // Controlla aggiornamenti periodicamente
+                            setInterval(() => {
+                                registration.update();
+                            }, 60000); // Ogni minuto
+                            
+                            // Gestisci aggiornamento del service worker
+                            registration.addEventListener('updatefound', () => {
+                                const newWorker = registration.installing;
+                                newWorker.addEventListener('statechange', () => {
+                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                        showUpdatePrompt(registration);
+                                    }
+                                });
                             });
-                        });
+                        }
                     })
                     .catch(function(error) {
-                        console.log('❌ Service Worker registration fallito:', error);
+                        console.log('⚠️ Service Worker non disponibile:', error.message);
+                        console.log('📱 App funziona in modalità normale senza cache offline');
                     });
             });
+        } else {
+            console.log('⚠️ Service Worker non supportato da questo browser');
         }
 
         // Funzione per mostrare il prompt di aggiornamento
@@ -595,6 +609,12 @@
             const updatePrompt = document.getElementById('updatePrompt');
             const updateBtn = document.getElementById('updateBtn');
             const dismissUpdateBtn = document.getElementById('dismissUpdateBtn');
+            
+            // Controlla che tutti gli elementi esistano
+            if (!updatePrompt || !updateBtn || !dismissUpdateBtn) {
+                console.log('⚠️ Elementi update prompt non trovati, skip');
+                return;
+            }
             
             updatePrompt.style.display = 'block';
             
@@ -702,47 +722,59 @@
             document.head.appendChild(meta3);
         }
 
-        // Install Prompt
+        // Install Prompt con controlli di sicurezza
         let deferredPrompt;
         const installPrompt = document.getElementById('installPrompt');
         const installBtn = document.getElementById('installBtn');
         const dismissBtn = document.getElementById('dismissBtn');
 
-        // Mostra prompt di installazione
+        // Mostra prompt di installazione solo se tutti gli elementi esistono
         window.addEventListener('beforeinstallprompt', (e) => {
             console.log('💾 Install prompt disponibile');
             e.preventDefault();
             deferredPrompt = e;
             
-            // Controlla se l'utente ha già rifiutato
-            if (!localStorage.getItem('installDismissed')) {
+            // Controlla se l'utente ha già rifiutato e se gli elementi esistono
+            if (!localStorage.getItem('installDismissed') && installPrompt) {
                 installPrompt.style.display = 'block';
             }
         });
 
-        // Gestione click installa
-        installBtn.addEventListener('click', async () => {
-            if (!deferredPrompt) return;
-            
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            
-            console.log('📱 Install outcome:', outcome);
-            
-            if (outcome === 'accepted') {
-                showAlert('success', 'App Installata!', 'Gruppo Visconti Tasks è ora disponibile nella tua home screen');
-            }
-            
-            deferredPrompt = null;
-            installPrompt.style.display = 'none';
-        });
+        // Gestione click installa (con controllo esistenza)
+        if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+                if (!deferredPrompt) return;
+                
+                try {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    
+                    console.log('📱 Install outcome:', outcome);
+                    
+                    if (outcome === 'accepted') {
+                        showAlert('success', 'App Installata!', 'Gruppo Visconti Tasks è ora disponibile nella tua home screen');
+                    }
+                    
+                    deferredPrompt = null;
+                    if (installPrompt) {
+                        installPrompt.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.log('⚠️ Errore nell\'installazione PWA:', error);
+                }
+            });
+        }
 
-        // Gestione click dismetti
-        dismissBtn.addEventListener('click', () => {
-            installPrompt.style.display = 'none';
-            localStorage.setItem('installDismissed', 'true');
-            console.log('📱 Install prompt dismisso');
-        });
+        // Gestione click dismetti (con controllo esistenza)
+        if (dismissBtn) {
+            dismissBtn.addEventListener('click', () => {
+                if (installPrompt) {
+                    installPrompt.style.display = 'none';
+                }
+                localStorage.setItem('installDismissed', 'true');
+                console.log('📱 Install prompt dismisso');
+            });
+        }
 
         // Detect quando l'app è installata
         window.addEventListener('appinstalled', (e) => {
@@ -751,20 +783,25 @@
             installPrompt.style.display = 'none';
         });
 
-        // Online/Offline Status
+        // Online/Offline Status con controlli di sicurezza
         const offlineIndicator = document.getElementById('offlineIndicator');
 
         function updateOnlineStatus() {
             if (navigator.onLine) {
-                offlineIndicator.style.display = 'none';
+                if (offlineIndicator) {
+                    offlineIndicator.style.display = 'none';
+                }
                 console.log('🌐 App online');
             } else {
-                offlineIndicator.style.display = 'block';
+                if (offlineIndicator) {
+                    offlineIndicator.style.display = 'block';
+                }
                 console.log('📵 App offline');
                 showAlert('warning', 'Modalità Offline', 'I dati verranno salvati localmente e sincronizzati quando tornerai online');
             }
         }
 
+        // Event listeners sicuri per online/offline
         window.addEventListener('online', updateOnlineStatus);
         window.addEventListener('offline', updateOnlineStatus);
 
@@ -1157,6 +1194,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Gestore Compiti - Gruppo Visconti</title>
     
     <!-- PWA Meta Tags -->
@@ -1166,6 +1204,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Gruppo Visconti Tasks">
     <meta name="msapplication-TileColor" content="#667eea">
+    <meta name="msapplication-config" content="none">
+    
+    <!-- Prevent Quirks Mode -->
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="format-detection" content="email=no">
     
     <!-- PWA Icons -->
     <link rel="icon" type="image/png" sizes="32x32" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0idXJsKCNncmFkaWVudCkiLz4KPHN2ZyB4PSI4IiB5PSI4IiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiPgo8cGF0aCBkPSJNMiAyaDEydjEySDJ6IiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIwLjkiLz4KPC9zdmc+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9ImdyYWRpZW50IiB4MT0iMCIgeTE9IjAiIHgyPSIzMiIgeTI9IjMyIj4KPHN0b3Agc3RvcC1jb2xvcj0iIzY2N2VlYSIvPgo8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM3NjRiYTIiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4=">
@@ -1174,7 +1218,9 @@
     <!-- Manifest -->
     <link rel="manifest" href="manifest.json">
     
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Preload critical resources -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <style>
         * {
             margin: 0;
