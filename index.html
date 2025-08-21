@@ -247,8 +247,55 @@
         }
         .task-card:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(0,0,0,0.15); }
 
-        .task-title { font-size: 1.2rem; font-weight: 600; color: #2c3e50; margin-bottom: 10px; }
-        .task-description { color: #7f8c8d; margin-bottom: 15px; line-height: 1.6; }
+        .task-title { 
+            font-size: 1.2rem; 
+            font-weight: 600; 
+            color: #2c3e50; 
+            margin-bottom: 10px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+        }
+        
+        .task-description { 
+            color: #7f8c8d; 
+            margin-bottom: 15px; 
+            line-height: 1.6;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+            max-height: 80px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .task-description.expanded {
+            max-height: none;
+        }
+        
+        .task-description:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 20px;
+            background: linear-gradient(transparent, white);
+            pointer-events: none;
+        }
+        
+        .task-description.expanded:after {
+            display: none;
+        }
+        
+        .description-toggle {
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.8rem;
+            text-decoration: underline;
+            margin-top: 5px;
+            display: none;
+        }
         .task-meta {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 15px; font-size: 0.9rem;
@@ -502,10 +549,14 @@
                         <div class="form-group">
                             <label for="taskAssignee">Assegnato a *</label>
                             <select id="taskAssignee" required multiple style="height: auto; min-height: 50px;">
-                                <option value="Marco Rossi">👤 Marco Rossi</option>
-                                <option value="Luca Bianchi">👤 Luca Bianchi</option>
-                                <option value="Sara Verde">👤 Sara Verde</option>
-                                <option value="Admin" selected>👤 Admin</option>
+                                <option value="LUCIANO">👤 LUCIANO</option>
+                                <option value="ANTONIO">👤 ANTONIO</option>
+                                <option value="LUIGI">👤 LUIGI</option>
+                                <option value="DARIO">👤 DARIO</option>
+                                <option value="NOEMI">👤 NOEMI</option>
+                                <option value="VINCENZO">👤 VINCENZO</option>
+                                <option value="ROBERTO">👤 ROBERTO</option>
+                                <option value="MARIANO">👤 MARIANO</option>
                             </select>
                             <small style="color: rgba(255,255,255,0.8); font-size: 0.8rem;">Tieni premuto Ctrl per selezionare più persone</small>
                         </div>
@@ -577,11 +628,14 @@
                             </button>
                         </div>
                         
+                        <button type="button" class="btn btn-purple" onclick="requestNotificationPermission()" style="flex: 0 0 auto;">
+                            🔔 Notifiche
+                        </button>
                         <button type="button" class="btn btn-success" onclick="exportData()" style="flex: 0 0 auto;">
                             📊 Export
                         </button>
                         <button type="button" class="btn btn-purple" onclick="checkDeadlines()" style="flex: 0 0 auto;">
-                            🔔 Scadenze
+                            ⏰ Scadenze
                         </button>
                         <button type="button" class="btn btn-purple" onclick="clearAllData()" style="flex: 0 0 auto;">
                             🗑️ Reset
@@ -596,10 +650,14 @@
                 
                 <select id="filterAssignee" onchange="applyFilters()" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
                     <option value="tutti">👥 Tutti gli assegnatari</option>
-                    <option value="Marco Rossi">👤 Marco Rossi</option>
-                    <option value="Luca Bianchi">👤 Luca Bianchi</option>
-                    <option value="Sara Verde">👤 Sara Verde</option>
-                    <option value="Admin">👤 Admin</option>
+                    <option value="LUCIANO">👤 LUCIANO</option>
+                    <option value="ANTONIO">👤 ANTONIO</option>
+                    <option value="LUIGI">👤 LUIGI</option>
+                    <option value="DARIO">👤 DARIO</option>
+                    <option value="NOEMI">👤 NOEMI</option>
+                    <option value="VINCENZO">👤 VINCENZO</option>
+                    <option value="ROBERTO">👤 ROBERTO</option>
+                    <option value="MARIANO">👤 MARIANO</option>
                 </select>
                 
                 <select id="filterPriority" onchange="applyFilters()" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
@@ -930,6 +988,26 @@
             notificationsList.innerHTML = html;
         }
 
+        // Funzione per espandere/contrarre le descrizioni lunghe
+        function toggleDescription(taskId, fullDescription) {
+            var descElement = document.getElementById('desc-' + taskId);
+            var toggleElement = descElement.nextElementSibling;
+            
+            if (descElement.classList.contains('expanded')) {
+                // Contrai
+                var shortDescription = fullDescription.length > 150 ? 
+                    fullDescription.substring(0, 150) + '...' : fullDescription;
+                descElement.innerHTML = shortDescription;
+                descElement.classList.remove('expanded');
+                toggleElement.textContent = 'Mostra tutto';
+            } else {
+                // Espandi
+                descElement.innerHTML = fullDescription;
+                descElement.classList.add('expanded');
+                toggleElement.textContent = 'Mostra meno';
+            }
+        }
+
         // Gestione Form e Tasks
         function addTask(event) {
             event.preventDefault();
@@ -955,7 +1033,7 @@
             }
             
             var task = {
-                id: generateId(),
+                id: editingTaskId || generateId(),
                 title: title,
                 description: description,
                 assignee: selectedAssignees,
@@ -964,15 +1042,50 @@
                 status: status,
                 tags: selectedTags ? selectedTags.split(',') : [],
                 enableReminder: enableReminder,
-                createdAt: new Date().toISOString(),
+                createdAt: editingTaskId ? 
+                    (taskManager.tasks.find(function(t) { return t.id === editingTaskId; }) || {}).createdAt || new Date().toISOString()
+                    : new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 createdBy: taskManager.currentUser
             };
             
-            taskManager.tasks.push(task);
+            if (editingTaskId) {
+                // Modalità modifica: aggiorna il task esistente
+                var taskIndex = taskManager.tasks.findIndex(function(t) { return t.id === editingTaskId; });
+                if (taskIndex !== -1) {
+                    taskManager.tasks[taskIndex] = task;
+                    showAlert('success', 'Compito Aggiornato', 'Il compito "' + title + '" è stato aggiornato con successo');
+                    addNotification('info', 'Compito Modificato', 
+                        'Il compito "' + task.title + '" è stato aggiornato', task.id);
+                } else {
+                    // Se per qualche motivo il task non esiste più, aggiungilo
+                    taskManager.tasks.push(task);
+                    showAlert('success', 'Compito Aggiunto', 'Il compito "' + title + '" è stato creato con successo');
+                }
+                editingTaskId = null;
+            } else {
+                // Modalità creazione: aggiungi nuovo task
+                taskManager.tasks.push(task);
+                showAlert('success', 'Compito Aggiunto', 'Il compito "' + title + '" è stato creato con successo');
+                addNotification('assigned', 'Nuovo Compito Creato', 
+                    'Il compito "' + task.title + '" è stato assegnato a ' + selectedAssignees.join(', '), task.id);
+                
+                // Mostra modal per le notifiche esterne
+                setTimeout(function() {
+                    showNotificationModal(task.title, selectedAssignees);
+                }, 1000);
+            }
+            
             saveData();
             
-            // Reset form
+            // Reset form e UI
+            resetForm();
+            renderCurrentView();
+            updateStats();
+        }
+
+        // Funzione per resettare il form
+        function resetForm() {
             document.getElementById('taskForm').reset();
             document.getElementById('selectedTags').value = '';
             var tagOptions = document.querySelectorAll('.tag-option');
@@ -980,17 +1093,207 @@
                 tagOptions[i].classList.remove('selected');
             }
             
-            renderCurrentView();
-            updateStats();
+            // Reset del pulsante e stile del form
+            var submitButton = document.querySelector('.btn-primary');
+            if (submitButton) {
+                submitButton.innerHTML = '➕ Aggiungi Compito';
+                submitButton.style.background = 'rgba(255, 255, 255, 0.9)';
+            }
             
-            addNotification('assigned', 'Nuovo Compito Creato', 
-                'Il compito "' + task.title + '" è stato assegnato a ' + selectedAssignees.join(', '), task.id);
+            var taskForm = document.querySelector('.task-form');
+            if (taskForm) {
+                taskForm.style.borderLeft = '5px solid transparent';
+            }
             
-            showAlert('success', 'Compito Aggiunto', 'Il compito "' + title + '" è stato creato con successo');
+            editingTaskId = null;
         }
 
-        // Variabile per gestire la modalità di modifica
-        var editingTaskId = null;
+        // Sistema di notifiche esterne
+        var teamContacts = {
+            'Marco Rossi': {
+                email: 'marco.rossi@gruppovisconti.it',
+                phone: '+393334567890',
+                whatsapp: '+393334567890'
+            },
+            'Luca Bianchi': {
+                email: 'luca.bianchi@gruppovisconti.it', 
+                phone: '+393445678901',
+                whatsapp: '+393445678901'
+            },
+            'Sara Verde': {
+                email: 'sara.verde@gruppovisconti.it',
+                phone: '+393556789012', 
+                whatsapp: '+393556789012'
+            },
+            'Admin': {
+                email: 'admin@gruppovisconti.it',
+                phone: '+393667890123',
+                whatsapp: '+393667890123'
+            }
+        };
+
+        // Richiesta permessi notifiche browser
+        function requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission().then(function(permission) {
+                    if (permission === 'granted') {
+                        showAlert('success', 'Notifiche Attivate', 'Le notifiche del browser sono ora attive');
+                    }
+                });
+            }
+        }
+
+        // Notifica browser
+        function showBrowserNotification(title, message, taskId) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                var notification = new Notification('📋 ' + title, {
+                    body: message,
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="0.9em" font-size="90">📋</text></svg>',
+                    badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="0.9em" font-size="90">📋</text></svg>',
+                    tag: 'task-' + taskId,
+                    requireInteraction: true
+                });
+                
+                notification.onclick = function() {
+                    window.focus();
+                    notification.close();
+                };
+                
+                setTimeout(function() {
+                    notification.close();
+                }, 10000);
+            }
+        }
+
+        // Invia notifica WhatsApp
+        function sendWhatsAppNotification(assignees, taskTitle, taskDescription) {
+            var message = '📋 *Nuovo Compito Assegnato*\n\n' +
+                         '*Titolo:* ' + taskTitle + '\n' +
+                         '*Descrizione:* ' + (taskDescription || 'Nessuna descrizione') + '\n' +
+                         '*Assegnato da:* ' + taskManager.currentUser + '\n' +
+                         '*Data:* ' + new Date().toLocaleDateString('it-IT') + '\n\n' +
+                         '📱 Gruppo Visconti - Task Manager';
+            
+            for (var i = 0; i < assignees.length; i++) {
+                var contact = teamContacts[assignees[i]];
+                if (contact && contact.whatsapp) {
+                    var whatsappUrl = 'https://wa.me/' + contact.whatsapp.replace(/[^0-9]/g, '') + 
+                                     '?text=' + encodeURIComponent(message);
+                    window.open(whatsappUrl, '_blank');
+                }
+            }
+        }
+
+        // Invia notifica Email
+        function sendEmailNotification(assignees, taskTitle, taskDescription, dueDate) {
+            var subject = '📋 Nuovo Compito Assegnato: ' + taskTitle;
+            var body = 'Ciao!\n\n' +
+                      'Ti è stato assegnato un nuovo compito:\n\n' +
+                      '📋 TITOLO: ' + taskTitle + '\n' +
+                      '📝 DESCRIZIONE: ' + (taskDescription || 'Nessuna descrizione') + '\n' +
+                      '📅 SCADENZA: ' + (dueDate ? new Date(dueDate).toLocaleDateString('it-IT') : 'Nessuna scadenza') + '\n' +
+                      '👤 ASSEGNATO DA: ' + taskManager.currentUser + '\n' +
+                      '📆 DATA ASSEGNAZIONE: ' + new Date().toLocaleDateString('it-IT') + '\n\n' +
+                      'Accedi al Task Manager per maggiori dettagli.\n\n' +
+                      '---\n' +
+                      'Gruppo Visconti - Join the ReEvolution\n' +
+                      'Task Manager System';
+            
+            for (var i = 0; i < assignees.length; i++) {
+                var contact = teamContacts[assignees[i]];
+                if (contact && contact.email) {
+                    var mailtoUrl = 'mailto:' + contact.email + 
+                                   '?subject=' + encodeURIComponent(subject) + 
+                                   '&body=' + encodeURIComponent(body);
+                    window.open(mailtoUrl, '_blank');
+                }
+            }
+        }
+
+        // Mostra modal di notifica
+        function showNotificationModal(taskTitle, assignees) {
+            var modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                background: rgba(0,0,0,0.5); z-index: 2000; display: flex; 
+                align-items: center; justify-content: center;
+            `;
+            
+            var modalContent = document.createElement('div');
+            modalContent.style.cssText = `
+                background: white; border-radius: 15px; padding: 30px; 
+                max-width: 500px; width: 90%; box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            `;
+            
+            modalContent.innerHTML = `
+                <h3 style="margin-bottom: 20px; color: #2c3e50;">📱 Invia Notifiche</h3>
+                <p style="margin-bottom: 20px; color: #7f8c8d;">
+                    Vuoi inviare una notifica per il compito "<strong>${taskTitle}</strong>" agli assegnatari?
+                </p>
+                <div style="margin-bottom: 20px;">
+                    <strong>👥 Assegnatari:</strong><br>
+                    ${assignees.map(function(name) {
+                        var contact = teamContacts[name];
+                        return `📧 ${name} - ${contact ? contact.email : 'Email non disponibile'}`;
+                    }).join('<br>')}
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button onclick="sendNotificationAndClose('whatsapp', '${taskTitle}', '${assignees.join('|')}')" 
+                            style="background: #25D366; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                        💬 WhatsApp
+                    </button>
+                    <button onclick="sendNotificationAndClose('email', '${taskTitle}', '${assignees.join('|')}')" 
+                            style="background: #EA4335; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                        📧 Email
+                    </button>
+                    <button onclick="sendNotificationAndClose('browser', '${taskTitle}', '${assignees.join('|')}')" 
+                            style="background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                        🔔 Browser
+                    </button>
+                    <button onclick="closeNotificationModal()" 
+                            style="background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                        ❌ Chiudi
+                    </button>
+                </div>
+            `;
+            
+            modal.appendChild(modalContent);
+            document.body.appendChild(modal);
+            modal.id = 'notificationModal';
+        }
+
+        // Invia notifica e chiudi modal
+        function sendNotificationAndClose(type, taskTitle, assigneesString) {
+            var assignees = assigneesString.split('|');
+            var task = taskManager.tasks.find(function(t) { return t.title === taskTitle; });
+            
+            switch(type) {
+                case 'whatsapp':
+                    sendWhatsAppNotification(assignees, taskTitle, task ? task.description : '');
+                    showAlert('success', 'WhatsApp Aperto', 'Si sono aperti i link per inviare i messaggi WhatsApp');
+                    break;
+                case 'email':
+                    sendEmailNotification(assignees, taskTitle, task ? task.description : '', task ? task.dueDate : '');
+                    showAlert('success', 'Email Aperta', 'Si sono aperti i client email per inviare le notifiche');
+                    break;
+                case 'browser':
+                    showBrowserNotification('Nuovo Compito', 
+                        'Il compito "' + taskTitle + '" è stato assegnato a ' + assignees.join(', '), 
+                        task ? task.id : '');
+                    showAlert('success', 'Notifica Browser', 'È stata inviata una notifica del browser');
+                    break;
+            }
+            
+            closeNotificationModal();
+        }
+
+        // Chiudi modal notifiche
+        function closeNotificationModal() {
+            var modal = document.getElementById('notificationModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
 
         function editTask(taskId) {
             var task = taskManager.tasks.find(function(t) { return t.id === taskId; });
@@ -1259,11 +1562,23 @@
                 var assignees = Array.isArray(task.assignee) ? task.assignee : [task.assignee];
                 var tags = task.tags || [];
                 
+                // Gestione descrizione lunga
+                var description = task.description || 'Nessuna descrizione';
+                var shortDescription = description.length > 150 ? 
+                    description.substring(0, 150) + '...' : description;
+                var needsToggle = description.length > 150;
+                
                 html += 
                     '<div class="task-card">' +
                     '<div class="task-title">' + task.title + getDueBadge(task.dueDate) + '</div>' +
-                    '<div class="task-description">' + (task.description || 'Nessuna descrizione') + '</div>' +
-                    '<div class="task-meta">' +
+                    '<div class="task-description" id="desc-' + task.id + '">' + shortDescription + '</div>';
+                
+                if (needsToggle) {
+                    html += '<div class="description-toggle" onclick="toggleDescription(\'' + task.id + '\', \'' + 
+                        description.replace(/'/g, '&#39;').replace(/"/g, '&quot;') + '\')">Mostra tutto</div>';
+                }
+                
+                html += '<div class="task-meta">' +
                     '<span class="task-assignee">👤 ' + assignees.join(', ') + '</span>' +
                     '<span class="task-date">📅 ' + (task.dueDate ? formatDate(task.dueDate) : 'Nessuna scadenza') + '</span>' +
                     '</div>';
@@ -1679,8 +1994,8 @@
                 {
                     id: generateId(),
                     title: 'Preparare presentazione Q4',
-                    description: 'Creare slides per la presentazione dei risultati del quarto trimestre',
-                    assignee: ['Marco Rossi'],
+                    description: 'Creare slides per la presentazione dei risultati del quarto trimestre con analisi dettagliata delle performance aziendali',
+                    assignee: ['LUCIANO', 'ANTONIO'],
                     priority: 'alta',
                     dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     status: 'in-corso',
@@ -1692,9 +2007,9 @@
                 },
                 {
                     id: generateId(),
-                    title: 'Aggiornare il sito web',
-                    description: 'Implementare le nuove funzionalità richieste dal cliente',
-                    assignee: ['Luca Bianchi', 'Sara Verde'],
+                    title: 'Aggiornare il sito web aziendale',
+                    description: 'Implementare le nuove funzionalità richieste dal cliente e ottimizzare la user experience',
+                    assignee: ['LUIGI', 'DARIO'],
                     priority: 'media',
                     dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     status: 'da-iniziare',
@@ -1706,15 +2021,43 @@
                 },
                 {
                     id: generateId(),
-                    title: 'Campagna marketing sui social',
-                    description: 'Pianificare e lanciare la nuova campagna promozionale',
-                    assignee: ['Sara Verde'],
-                    priority: 'bassa',
+                    title: 'Campagna marketing sui social media',
+                    description: 'Pianificare e lanciare la nuova campagna promozionale per il lancio del prodotto',
+                    assignee: ['NOEMI'],
+                    priority: 'media',
                     dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     status: 'completato',
                     tags: ['Marketing', 'Interno'],
                     enableReminder: false,
                     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    createdBy: 'Admin'
+                },
+                {
+                    id: generateId(),
+                    title: 'Analisi finanziaria mensile',
+                    description: 'Preparare il report finanziario mensile con KPI e budget analysis',
+                    assignee: ['VINCENZO'],
+                    priority: 'alta',
+                    dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    status: 'in-revisione',
+                    tags: ['Interno', 'Urgente'],
+                    enableReminder: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    createdBy: 'Admin'
+                },
+                {
+                    id: generateId(),
+                    title: 'Gestione progetto cliente Premium',
+                    description: 'Coordinare tutte le attività per il cliente Premium e seguire l\'implementazione',
+                    assignee: ['ROBERTO', 'MARIANO'],
+                    priority: 'alta',
+                    dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    status: 'in-corso',
+                    tags: ['Cliente', 'Vendite'],
+                    enableReminder: true,
+                    createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     createdBy: 'Admin'
                 }
@@ -1725,7 +2068,7 @@
             renderCurrentView();
             updateStats();
             
-            showAlert('success', 'Dati Demo Aggiunti', 'Sono stati aggiunti alcuni compiti di esempio');
+            showAlert('success', 'Dati Demo Aggiunti', 'Sono stati aggiunti alcuni compiti di esempio per il team');
         }
 
         // Inizializzazione
