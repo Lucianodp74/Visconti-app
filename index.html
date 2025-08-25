@@ -624,6 +624,10 @@
                             🔄 Reset Form
                         </button>
                         
+                        <button type="button" class="btn btn-success" onclick="shareData()" style="flex: 0 0 auto;">
+                            🔗 Condividi
+                        </button>
+                        
                         <button type="button" class="btn btn-success" onclick="exportData()" style="flex: 0 0 auto;">
                             📊 Export CSV
                         </button>
@@ -1540,7 +1544,189 @@
             if (elements.pending) elements.pending.textContent = filteredTasks.filter(function(t) { return t.status === 'da-iniziare'; }).length;
         }
 
-        // Data Management
+        // Sistema di Condivisione tramite URL
+        function shareData() {
+            try {
+                var data = {
+                    tasks: taskManager.tasks,
+                    notifications: taskManager.notifications.slice(0, 5), // Solo le ultime 5
+                    timestamp: new Date().toISOString()
+                };
+                
+                var compressedData = btoa(JSON.stringify(data));
+                var shareUrl = window.location.origin + window.location.pathname + '?data=' + encodeURIComponent(compressedData);
+                
+                // Crea modal per condivisione
+                showShareModal(shareUrl, data);
+                
+            } catch (error) {
+                console.error('Errore condivisione:', error);
+                showAlert('danger', 'Errore Condivisione', 'Impossibile generare il link di condivisione');
+            }
+        }
+
+        function showShareModal(shareUrl, data) {
+            var modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                background: rgba(0,0,0,0.5); z-index: 2000; display: flex; 
+                align-items: center; justify-content: center;
+            `;
+            
+            var modalContent = document.createElement('div');
+            modalContent.style.cssText = `
+                background: white; border-radius: 15px; padding: 30px; 
+                max-width: 600px; width: 90%; box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+                max-height: 80vh; overflow-y: auto;
+            `;
+            
+            modalContent.innerHTML = `
+                <h3 style="margin-bottom: 20px; color: #2c3e50;">📤 Condividi Compiti con i Colleghi</h3>
+                
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <strong>📊 Dati da condividere:</strong><br>
+                    • ${data.tasks.length} compiti<br>
+                    • ${data.notifications.length} notifiche recenti<br>
+                    • Aggiornato: ${formatDate(data.timestamp)}
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600;">🔗 Link di Condivisione:</label>
+                    <textarea id="shareUrlText" readonly style="width: 100%; height: 80px; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 12px; font-family: monospace;">${shareUrl}</textarea>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <strong>📋 Come usare:</strong><br>
+                    1. Copia il link sopra<br>
+                    2. Invialo ai colleghi (email, chat, WhatsApp)<br>
+                    3. Quando aprono il link, vedranno tutti i compiti<br>
+                    4. I dati si salveranno anche sui loro dispositivi
+                </div>
+                
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button onclick="copyShareUrl()" style="background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                        📋 Copia Link
+                    </button>
+                    <button onclick="sendWhatsAppShare('${encodeURIComponent(shareUrl)}')" style="background: #25D366; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                        💬 WhatsApp
+                    </button>
+                    <button onclick="sendEmailShare('${encodeURIComponent(shareUrl)}')" style="background: #EA4335; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                        📧 Email
+                    </button>
+                    <button onclick="closeShareModal()" style="background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                        ❌ Chiudi
+                    </button>
+                </div>
+            `;
+            
+            modal.appendChild(modalContent);
+            document.body.appendChild(modal);
+            modal.id = 'shareModal';
+        }
+
+        function copyShareUrl() {
+            var textarea = document.getElementById('shareUrlText');
+            textarea.select();
+            document.execCommand('copy');
+            showAlert('success', 'Link Copiato', 'Il link è stato copiato negli appunti');
+        }
+
+        function sendWhatsAppShare(shareUrl) {
+            var message = '📋 *Compiti Gruppo Visconti*\n\n' +
+                         'Ti condivido i compiti aggiornati del team.\n\n' +
+                         '🔗 Clicca qui per visualizzarli:\n' + decodeURIComponent(shareUrl) + '\n\n' +
+                         '💡 I dati si salveranno automaticamente sul tuo dispositivo.\n\n' +
+                         '📱 Gruppo Visconti - Task Manager';
+            
+            window.open('https://wa.me/?text=' + encodeURIComponent(message), '_blank');
+        }
+
+        function sendEmailShare(shareUrl) {
+            var subject = '📋 Compiti Gruppo Visconti - Aggiornamento';
+            var body = 'Ciao!\n\n' +
+                      'Ti invio l\'aggiornamento dei compiti del team Gruppo Visconti.\n\n' +
+                      '🔗 LINK PER VISUALIZZARE I COMPITI:\n' + decodeURIComponent(shareUrl) + '\n\n' +
+                      '📝 ISTRUZIONI:\n' +
+                      '1. Clicca sul link sopra\n' +
+                      '2. I compiti si caricheranno automaticamente\n' +
+                      '3. I dati si salveranno sul tuo browser\n' +
+                      '4. Potrai visualizzare e gestire i compiti\n\n' +
+                      '💡 Il link contiene tutti i compiti aggiornati al ' + new Date().toLocaleDateString('it-IT') + '\n\n' +
+                      '---\n' +
+                      'Gruppo Visconti - Join the ReEvolution\n' +
+                      'Task Manager System';
+            
+            window.open('mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
+        }
+
+        function closeShareModal() {
+            var modal = document.getElementById('shareModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // Caricamento dati da URL
+        function loadDataFromUrl() {
+            try {
+                var urlParams = new URLSearchParams(window.location.search);
+                var sharedData = urlParams.get('data');
+                
+                if (sharedData) {
+                    var decodedData = JSON.parse(atob(decodeURIComponent(sharedData)));
+                    
+                    if (decodedData.tasks && Array.isArray(decodedData.tasks)) {
+                        // Mostra conferma prima di sovrascrivere
+                        var existingTasks = taskManager.tasks.length;
+                        var newTasks = decodedData.tasks.length;
+                        
+                        var message = 'Trovati ' + newTasks + ' compiti condivisi.\n\n';
+                        if (existingTasks > 0) {
+                            message += 'Hai già ' + existingTasks + ' compiti locali.\n\n';
+                            message += 'Vuoi:\n';
+                            message += '• SOSTITUIRE i tuoi compiti con quelli condivisi?\n';
+                            message += '• AGGIUNGERE i compiti condivisi a quelli esistenti?\n\n';
+                            message += 'Clicca OK per SOSTITUIRE, Annulla per AGGIUNGERE.';
+                            
+                            if (confirm(message)) {
+                                // Sostituisci
+                                taskManager.tasks = decodedData.tasks;
+                                taskManager.notifications = decodedData.notifications || [];
+                            } else {
+                                // Aggiungi
+                                taskManager.tasks = taskManager.tasks.concat(decodedData.tasks);
+                                taskManager.notifications = taskManager.notifications.concat(decodedData.notifications || []);
+                            }
+                        } else {
+                            // Nessun compito esistente, carica direttamente
+                            taskManager.tasks = decodedData.tasks;
+                            taskManager.notifications = decodedData.notifications || [];
+                        }
+                        
+                        saveData();
+                        renderTasks();
+                        renderNotifications();
+                        updateStats();
+                        
+                        // Rimuovi parametri dall'URL
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                        
+                        showAlert('success', 'Compiti Caricati', 
+                            'Caricati ' + decodedData.tasks.length + ' compiti condivisi dal team');
+                        
+                        addNotification('info', 'Dati Condivisi Caricati', 
+                            'Ricevuti ' + decodedData.tasks.length + ' compiti dal team');
+                        
+                        return true;
+                    }
+                }
+                return false;
+            } catch (error) {
+                console.error('Errore caricamento dati condivisi:', error);
+                showAlert('warning', 'Errore Condivisione', 'Link di condivisione non valido o danneggiato');
+                return false;
+            }
+        }
         function exportData() {
             try {
                 var filteredTasks = getFilteredTasks();
