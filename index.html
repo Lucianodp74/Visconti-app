@@ -620,6 +620,10 @@
                             ➕ Aggiungi Compito
                         </button>
                         
+                        <button type="button" class="btn btn-purple" onclick="resetForm()" style="flex: 0 0 auto;">
+                            🔄 Reset Form
+                        </button>
+                        
                         <button type="button" class="btn btn-success" onclick="exportData()" style="flex: 0 0 auto;">
                             📊 Export CSV
                         </button>
@@ -1108,12 +1112,16 @@
             document.getElementById('selectedTags').value = selectedTags.join(',');
         }
 
+        // Variabile globale per tracciare la modifica
+        var editingTaskId = null;
+
         // Task Management
         function addTask(event) {
             event.preventDefault();
             
-            console.log('🔄 Creazione nuovo compito...');
-            updateStatus('📝 Creazione compito...');
+            var isEditing = editingTaskId !== null;
+            console.log(isEditing ? '🔄 Modifica compito...' : '🔄 Creazione nuovo compito...');
+            updateStatus(isEditing ? '✏️ Modifica compito...' : '📝 Creazione compito...');
             
             try {
                 // Raccolta dati form
@@ -1144,27 +1152,82 @@
                 var selectedTags = document.getElementById('selectedTags').value;
                 var enableReminder = document.getElementById('enableReminder').checked;
                 
-                // Creazione task
-                var task = {
-                    id: generateId(),
-                    title: title,
-                    description: description,
-                    assignee: selectedAssignees,
-                    priority: priority,
-                    dueDate: dueDate,
-                    status: status,
-                    tags: selectedTags ? selectedTags.split(',') : [],
-                    enableReminder: enableReminder,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: taskManager.currentUser
-                };
-                
-                console.log('📋 Task creato:', task);
-                
-                // Aggiungi alla lista
-                taskManager.tasks.push(task);
-                console.log('📊 Totale tasks:', taskManager.tasks.length);
+                if (isEditing) {
+                    // MODALITÀ MODIFICA: Aggiorna task esistente
+                    var taskIndex = -1;
+                    var existingTask = null;
+                    
+                    for (var i = 0; i < taskManager.tasks.length; i++) {
+                        if (taskManager.tasks[i].id === editingTaskId) {
+                            taskIndex = i;
+                            existingTask = taskManager.tasks[i];
+                            break;
+                        }
+                    }
+                    
+                    if (taskIndex !== -1 && existingTask) {
+                        // Aggiorna il task esistente mantenendo ID e data creazione
+                        taskManager.tasks[taskIndex] = {
+                            id: editingTaskId,
+                            title: title,
+                            description: description,
+                            assignee: selectedAssignees,
+                            priority: priority,
+                            dueDate: dueDate,
+                            status: status,
+                            tags: selectedTags ? selectedTags.split(',') : [],
+                            enableReminder: enableReminder,
+                            createdAt: existingTask.createdAt, // Mantieni data originale
+                            updatedAt: new Date().toISOString(),
+                            createdBy: existingTask.createdBy
+                        };
+                        
+                        console.log('✏️ Task modificato:', taskManager.tasks[taskIndex]);
+                        
+                        showAlert('success', 'Compito Aggiornato', 
+                            'Il compito "' + title + '" è stato aggiornato con successo');
+                        
+                        addNotification('info', 'Compito Modificato', 
+                            'Aggiornato: "' + title + '"', editingTaskId);
+                        
+                        updateStatus('✅ Compito aggiornato');
+                        
+                    } else {
+                        showAlert('danger', 'Errore', 'Compito da modificare non trovato');
+                        return;
+                    }
+                    
+                } else {
+                    // MODALITÀ CREAZIONE: Nuovo task
+                    var task = {
+                        id: generateId(),
+                        title: title,
+                        description: description,
+                        assignee: selectedAssignees,
+                        priority: priority,
+                        dueDate: dueDate,
+                        status: status,
+                        tags: selectedTags ? selectedTags.split(',') : [],
+                        enableReminder: enableReminder,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        createdBy: taskManager.currentUser
+                    };
+                    
+                    console.log('📋 Task creato:', task);
+                    
+                    // Aggiungi alla lista
+                    taskManager.tasks.push(task);
+                    console.log('📊 Totale tasks:', taskManager.tasks.length);
+                    
+                    showAlert('success', 'Compito Creato', 
+                        'Il compito "' + title + '" è stato creato con successo');
+                    
+                    addNotification('assigned', 'Nuovo Compito', 
+                        'Creato: "' + title + '" per ' + selectedAssignees.join(', '), task.id);
+                    
+                    updateStatus('✅ Compito creato');
+                }
                 
                 // Salvataggio
                 var saved = saveData();
@@ -1174,21 +1237,10 @@
                 updateStats();
                 resetForm();
                 
-                // Notifiche
-                addNotification('assigned', 'Nuovo Compito', 
-                    'Creato: "' + task.title + '" per ' + selectedAssignees.join(', '), task.id);
-                
-                showAlert('success', 'Compito Creato', 
-                    'Il compito "' + title + '" è stato creato con successo' + 
-                    (saved ? '' : ' (solo in memoria)'));
-                
-                console.log('✅ Compito aggiunto con successo');
-                updateStatus('✅ Compito creato');
-                
             } catch (error) {
-                console.error('❌ Errore creazione task:', error);
-                showAlert('danger', 'Errore', 'Impossibile creare il compito: ' + error.message);
-                updateStatus('❌ Errore creazione');
+                console.error('❌ Errore gestione task:', error);
+                showAlert('danger', 'Errore', 'Impossibile salvare il compito: ' + error.message);
+                updateStatus('❌ Errore operazione');
             }
         }
 
@@ -1201,6 +1253,24 @@
                 for (var i = 0; i < tagOptions.length; i++) {
                     tagOptions[i].classList.remove('selected');
                 }
+                
+                // Reset della modalità modifica
+                editingTaskId = null;
+                
+                // Reset del pulsante e indicatori visivi
+                var submitButton = document.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.innerHTML = '➕ Aggiungi Compito';
+                    submitButton.style.background = 'rgba(255, 255, 255, 0.9)';
+                }
+                
+                var taskForm = document.querySelector('.task-form');
+                if (taskForm) {
+                    taskForm.style.borderLeft = '';
+                }
+                
+                console.log('🔄 Form resettato, modalità creazione attiva');
+                
             } catch (e) {
                 console.warn('Errore reset form:', e);
             }
@@ -1253,7 +1323,11 @@
                     return;
                 }
                 
-                // Popola form
+                // Imposta modalità modifica
+                editingTaskId = taskId;
+                console.log('✏️ Attivata modalità modifica per task:', taskId);
+                
+                // Popola form con i dati del task
                 document.getElementById('taskTitle').value = task.title;
                 document.getElementById('taskDescription').value = task.description || '';
                 document.getElementById('taskPriority').value = task.priority;
@@ -1281,14 +1355,30 @@
                 }
                 updateSelectedTags();
                 
-                // Scroll al form
-                document.querySelector('.task-form').scrollIntoView({ behavior: 'smooth' });
+                // Aggiorna UI per indicare modalità modifica
+                var submitButton = document.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.innerHTML = '✏️ Aggiorna Compito';
+                    submitButton.style.background = 'rgba(52, 152, 219, 0.9)';
+                }
                 
-                showAlert('info', 'Modalità Modifica', 'Modifica i dati e salva le modifiche');
+                var taskForm = document.querySelector('.task-form');
+                if (taskForm) {
+                    taskForm.style.borderLeft = '5px solid #3498db';
+                }
+                
+                // Scroll al form
+                taskForm.scrollIntoView({ behavior: 'smooth' });
+                
+                showAlert('info', 'Modalità Modifica Attiva', 
+                    'Stai modificando: "' + task.title + '". Aggiorna i dati e clicca "Aggiorna Compito"');
+                
+                updateStatus('✏️ Modifica: ' + task.title);
                 
             } catch (error) {
                 console.error('Errore modifica task:', error);
                 showAlert('danger', 'Errore', 'Impossibile modificare il compito');
+                editingTaskId = null; // Reset in caso di errore
             }
         }
 
